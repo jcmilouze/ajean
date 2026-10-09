@@ -4172,6 +4172,9 @@ fr: {
   "cap.toggle": "Suggestions de suite",
   "cap.on": "Suggestions de suite activées",
   "cap.off": "Suggestions de suite désactivées",
+  "advice.toggle": "Conseil de modèle",
+  "advice.on": "Conseil de modèle activé",
+  "advice.off": "Conseil de modèle désactivé",
   "common.error_prefix": "erreur : ",
   "chat.loading_conversation": "chargement de la conversation…",
   "chat.send_hint_newline_mode": "Entrée = nouvelle ligne · Maj+Entrée pour envoyer",
@@ -5519,6 +5522,9 @@ en: {
   "cap.toggle": "Next-step suggestions",
   "cap.on": "Next-step suggestions on",
   "cap.off": "Next-step suggestions off",
+  "advice.toggle": "Model advice",
+  "advice.on": "Model advice on",
+  "advice.off": "Model advice off",
   "common.error_prefix": "error: ",
   "chat.loading_conversation": "loading the conversation…",
   "chat.send_hint_newline_mode": "Enter = new line · Shift+Enter to send",
@@ -11036,6 +11042,25 @@ async function toggleCap(){
   }catch(e){ toast(t('common.error_prefix') + (e.message || e)); }
 }
 loadCap();
+let PROMPT_HOOK_ON = false;
+async function loadPromptHook(){
+  try{
+    const r = await jfetch('/api/prompthook');
+    const j = await r.json().catch(()=>({}));
+    if(j.ok) PROMPT_HOOK_ON = !!j.on;
+  }catch(e){   }
+}
+async function togglePromptHook(){
+  const want = !PROMPT_HOOK_ON;
+  try{
+    const r = await jfetch('/api/prompthook', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({on:want})});
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok || !j.ok){ toast(j.error || t('common.error_prefix')); return; }
+    PROMPT_HOOK_ON = !!j.on;
+    toast(t(PROMPT_HOOK_ON ? 'advice.on' : 'advice.off'));
+  }catch(e){ toast(t('common.error_prefix') + (e.message || e)); }
+}
+loadPromptHook();
 let tasksList = [];
 let taskEditing = null; 
 let TASK_RUNNING = '';  
@@ -11591,6 +11616,7 @@ const PLUS_IC = {
   compact:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9l4-4 4 4M20 15l-4 4-4-4M8 5v6M16 19v-6"/></svg>',
   improve:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3l1.9 5.1L18 10l-5.1 1.9L11 17l-1.9-5.1L4 10l5.1-1.9z"/><path d="M19 15l.7 1.8 1.8.7-1.8.7L19 20l-.7-1.8-1.8-.7 1.8-.7z"/></svg>',
   cap:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+  advice:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg>',
 };
 const closePlusMenu = ()=>closeMenu();
 function togglePlusMenu(e){
@@ -11601,6 +11627,7 @@ function togglePlusMenu(e){
     {icon:PLUS_IC.improve, label:t('chat.improve_prompt'), disabled:!document.getElementById('input').value.trim(), run:improvePrompt},
     canRestoreImprovedPrompt() && {icon:PLUS_IC.clear, label:t('chat.improve_restore'), run:restoreImprovedPrompt},
     MODE!=='jean' && {icon:PLUS_IC.cap, label:t('cap.toggle'), on:CAP_ON, run:toggleCap},
+    {icon:PLUS_IC.advice, label:t('advice.toggle'), on:PROMPT_HOOK_ON, run:togglePromptHook},
     {icon:PLUS_IC.file, label:t('projects.attach_file'), run:()=>document.getElementById('attach-input').click()},
     MODE==='jean' ? {icon:PLUS_IC.clear, label:t('jean.clear_ctx'), run:clearJeanContext}
                   : {icon:PLUS_IC.chat, label:t('chat.new_chat_btn'), run:newChatFromTop},
