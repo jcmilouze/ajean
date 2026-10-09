@@ -114,6 +114,11 @@ type Conversation struct {
 	// prochaine frontière d'étape (après un appel d'outil), soit — si le tour se
 	// termine avant — traités comme des tours suivants, dans l'ordre. Protégée par mu.
 	queued []queuedMsg
+
+	// Suggestions de suite (cap.go) : capGen change à chaque nouveau tour et
+	// périme celles qui se génèrent encore ; capCancel les interrompt.
+	capGen    int
+	capCancel context.CancelFunc
 }
 
 // queuedMsg = un message mis en file pendant la génération. On mémorise ses caps et
@@ -675,6 +680,7 @@ func (c *Conversation) startQueuedIfAny() {
 // tout ce que ce tour produirait ensuite (deltas, messages, persistance) est
 // abandonné au lieu de ressusciter des morceaux de l'ancienne conversation.
 func (c *Conversation) generate(ctx context.Context, caps Caps, temperature float64, epoch int) {
+	c.capNewTurn()
 	// Horloge du tour : durée réelle (préchauffe + réflexion + outils + réponse),
 	// journalisée dans turn_done pour que l'UI affiche la MÊME durée en direct et
 	// après un rechargement (le chrono client, lui, n'existe qu'en direct).
@@ -783,9 +789,11 @@ func (c *Conversation) generate(ctx context.Context, caps Caps, temperature floa
 			c.appendDelta(epoch, map[string]any{"content": t})
 		}
 	}
+	turnFailed := false
 	extra, _ := runChat(ctx, InjectSkills(final, caps), temperature, caps, func(ev StreamEvent) bool {
 		switch {
 		case ev.Err != nil:
+			turnFailed = true
 			// Arrêt volontaire (bouton stop → cancel du contexte) : ce n'est pas une
 			// erreur, juste une interruption. Afficher « Post http://…: context
 			// canceled » en rouge est laid et alarmant pour rien — on pose à la place
@@ -915,6 +923,10 @@ func (c *Conversation) generate(ctx context.Context, caps Caps, temperature floa
 	ctxUsed = c.CtxUsed
 	stale := c.epoch != epoch
 	c.mu.Unlock()
+
+	if !stale && ctx.Err() == nil {
+		c.maybeSuggest(epoch, caps, msgs, extra, content.String(), !turnFailed)
+	}
 
 	// Mode Jean : l'échange part au journal (froid), sans coût pour le modèle.
 	if caps.Jean && !stale && ctx.Err() == nil {
