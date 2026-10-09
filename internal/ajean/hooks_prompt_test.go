@@ -100,6 +100,9 @@ func TestUserPromptSubmitClipsLongPrompt(t *testing.T) {
 	if n := len([]rune(got.Prompt)); n != hookPromptMaxRunes+1 {
 		t.Fatalf("la demande doit être tronquée à %d caractères plus « … », reçu %d", hookPromptMaxRunes, n)
 	}
+	if got.PromptChars != hookPromptMaxRunes+500 {
+		t.Fatalf("promptChars doit porter la longueur d'origine (%d), reçu %d", hookPromptMaxRunes+500, got.PromptChars)
+	}
 }
 
 func TestUserPromptSubmitSkipsJeanReflection(t *testing.T) {

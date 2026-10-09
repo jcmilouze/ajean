@@ -3,6 +3,7 @@ package ajean
 import (
 	"context"
 	"strings"
+	"unicode/utf8"
 )
 
 const hookPromptMaxRunes = 4000
@@ -45,9 +46,10 @@ func notifyUserPrompt(ctx context.Context, messages []Message, caps Caps) {
 		return
 	}
 	fireObservers(ctx, hookEvent{
-		Event:  "UserPromptSubmit",
-		Jean:   caps.Jean,
-		Prompt: clipRunes(prompt, hookPromptMaxRunes),
-		Preset: activePresetID(),
+		Event:       "UserPromptSubmit",
+		Jean:        caps.Jean,
+		Prompt:      clipRunes(prompt, hookPromptMaxRunes),
+		PromptChars: utf8.RuneCountInString(prompt),
+		Preset:      activePresetID(),
 	})
 }
