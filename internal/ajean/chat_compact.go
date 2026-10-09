@@ -30,8 +30,11 @@ import (
 
 const (
 	// Seuil de déclenchement proactif : on compacte quand l'historique estimé
-	// dépasse cette fraction de la fenêtre de contexte.
-	compactTriggerFrac = 0.75
+	// dépasse ce pourcentage de la fenêtre de contexte. Réglable par COMPACT_AT
+	// (compactAtMin..compactAtMax), voir compactTriggerTokens.
+	compactTriggerDefaultPct = 75
+	compactAtMin             = 30
+	compactAtMax             = 90
 	// Budget de la queue : fraction de la fenêtre gardée intacte (tours récents).
 	// Plus la queue est petite, plus on compacte de torse d'un coup → le contexte
 	// retombe bas et met longtemps à re-déclencher (au lieu de compacter souvent).
@@ -69,6 +72,19 @@ func compactEnabled() bool {
 		return false
 	}
 	return true
+}
+
+// compactTriggerTokens est la taille de contexte à partir de laquelle la
+// compaction proactive se déclenche : COMPACT_AT % de la fenêtre (config.env),
+// 75 % par défaut. Une valeur hors bornes est ramenée dans [30, 90] plutôt
+// qu'ignorée : qui écrit 10 veut compacter tôt. Illisible = défaut. Calcul
+// entier : 0.6×10000 en flottant n'est pas garanti de tomber pile sur 6000.
+func compactTriggerTokens() int {
+	pct := compactTriggerDefaultPct
+	if n, err := strconv.Atoi(strings.TrimSpace(ReadConfig()["COMPACT_AT"])); err == nil {
+		pct = min(max(n, compactAtMin), compactAtMax)
+	}
+	return ctxWindow() * pct / 100
 }
 
 // ctxWindow renvoie la fenêtre de contexte configurée (config.env CTX), 32768
@@ -213,7 +229,7 @@ func compactWouldTrigger(msgs []Message, knownTokens int) bool {
 	if used <= 0 {
 		used = estimateTokens(msgs)
 	}
-	return used >= int(float64(ctxWindow())*compactTriggerFrac)
+	return used >= compactTriggerTokens()
 }
 
 // compactLogOut : destination de logCompact. Le chat terminal la coupe, sa
@@ -227,7 +243,7 @@ var compactLogOut io.Writer = os.Stderr
 // été atteint ou si la réduction a été refusée.
 func logCompact(phase string, used int, before, after []Message, changed bool) {
 	fmt.Fprintf(compactLogOut, "[compact] %s ctx=%d seuil=%d/%d est_avant=%d est_apres=%d msgs=%d→%d changé=%v\n",
-		phase, used, int(float64(ctxWindow())*compactTriggerFrac), ctxWindow(),
+		phase, used, compactTriggerTokens(), ctxWindow(),
 		estimateTokens(before), estimateTokens(after), len(before), len(after), changed)
 }
 
