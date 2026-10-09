@@ -66,16 +66,17 @@ func hookPayload(ctx context.Context, ev hookEvent) ([]byte, bool) {
 	return b, err == nil
 }
 
+func hookTimeoutSec(h hookSpec) int {
+	if h.TimeoutSec <= 0 {
+		return hookDefaultTimeout
+	}
+	return min(h.TimeoutSec, hookMaxTimeout)
+}
+
 // runHook lance un hook et renvoie la raison du refus ("" = autorisé), ou une
 // erreur si le hook lui-même a échoué (plantage, délai, sortie illisible).
 func runHook(parent context.Context, h hookSpec, payload []byte) (string, error) {
-	to := h.TimeoutSec
-	if to <= 0 {
-		to = hookDefaultTimeout
-	}
-	if to > hookMaxTimeout {
-		to = hookMaxTimeout
-	}
+	to := hookTimeoutSec(h)
 	ctx, cancel := context.WithTimeout(parent, time.Duration(to)*time.Second)
 	defer cancel()
 	cmd, cleanup := newShellCmd(ctx, h.Command)

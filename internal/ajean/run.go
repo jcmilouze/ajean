@@ -80,6 +80,8 @@ func Main() {
 		mustExit(cmdOAI(args))
 	case "agent":
 		mustExit(cmdAgent(args))
+	case "hooks":
+		mustExit(cmdHooks(args))
 	case "internet":
 		mustExit(cmdInternet(args))
 	case "computer":
@@ -151,6 +153,7 @@ Interaction:
                                 --json  --last N  --no-reasoning
                                 --no-tools  --no-results
   agent [on|off|status]         donne à l'IA ses outils (shell, fichiers, mémoire)
+  hooks [list|test <outil> ['<json>']]  hooks d'outils : liste, ou essai d'un garde-fou
   computer [on|off|status]      contrôle du navigateur (l'IA pilote un Chrome local)
   memory [off|ondemand|always|search|status]  mode mémoire de l'IA
   internet [on|off|status|engine <go|crawl4ai>|url <url>|key <clé>]
