@@ -35,6 +35,9 @@ type hookEvent struct {
 	ContextTokens int    `json:"contextTokens,omitempty"` // taille du contexte en fin de tour
 	Status        string `json:"status,omitempty"`        // ok | error | stopped
 	Message       string `json:"message,omitempty"`       // texte de l'erreur
+	// UserPromptSubmit seulement : la demande qui démarre et le preset qui va y répondre.
+	Prompt string `json:"prompt,omitempty"`
+	Preset string `json:"preset,omitempty"` // id du preset actif ("" si indéterminé)
 }
 
 // runPreHooks exécute, dans l'ordre, les hooks PreToolUse qui visent cet outil.

@@ -908,6 +908,7 @@ func runChat(ctx context.Context, messages []Message, temperature float64, caps 
 		cb = rec.wrap(cb)
 		defer rec.finish(ctx, caps)
 	}
+	notifyUserPrompt(ctx, messages, caps)
 	var extra []Message
 	tools := withRecallTools(EnabledTools(caps), messages)
 	// Destination des complétions : llama-server local, ou une API OpenAI-compatible

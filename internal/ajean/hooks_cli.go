@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-var knownHookEvents = []string{"PreToolUse", "PostToolUse", "TurnEnd"}
+var knownHookEvents = []string{"PreToolUse", "PostToolUse", "TurnEnd", "UserPromptSubmit"}
 
 func cmdHooks(args []string) error {
 	sub := ""
@@ -92,7 +92,7 @@ func hookSettings(event string, h hookSpec) string {
 			onErr = "deny"
 		}
 		parts = append(parts, "onError="+onErr)
-	case "PostToolUse", "TurnEnd":
+	case "PostToolUse", "TurnEnd", "UserPromptSubmit":
 		if hookIsAsync(h) {
 			parts = append(parts, "asynchrone")
 		} else {

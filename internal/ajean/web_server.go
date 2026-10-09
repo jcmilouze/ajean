@@ -187,6 +187,7 @@ func newWebMux() *http.ServeMux {
 	api("/api/reasoning", handleReasoning)          // change l'effort de réflexion à chaud (raccourci composeur)
 	api("/api/prompt/improve", handlePromptImprove) // réécrit le brouillon du composeur avec le modèle chargé
 	api("/api/cap", handleCap)                      // interrupteur des suggestions de suite (cap.go)
+	api("/api/prompthook", handlePromptHook)        // interrupteur des hooks UserPromptSubmit (hooks_prompt.go)
 	api("/api/catalog", handleCatalog)
 	api("/api/paths", handlePaths)
 	api("/api/update", handleUpdateCheck)
