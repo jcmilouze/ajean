@@ -7,11 +7,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
 
-var knownHookEvents = []string{"PreToolUse", "PostToolUse"}
+var knownHookEvents = []string{"PreToolUse", "PostToolUse", "TurnEnd"}
 
 func cmdHooks(args []string) error {
 	sub := ""
@@ -53,7 +54,7 @@ func hooksList(w io.Writer) error {
 		return nil
 	}
 	for _, ev := range orderedHookEvents(cfg) {
-		known := ev == "PreToolUse" || ev == "PostToolUse"
+		known := slices.Contains(knownHookEvents, ev)
 		title := bold(ev)
 		if !known {
 			title += " " + red("(événement inconnu : ignoré)")
@@ -74,7 +75,7 @@ func orderedHookEvents(cfg hookConfig) []string {
 		}
 	}
 	for k := range cfg {
-		if k != "PreToolUse" && k != "PostToolUse" {
+		if !slices.Contains(knownHookEvents, k) {
 			others = append(others, k)
 		}
 	}
@@ -91,7 +92,7 @@ func hookSettings(event string, h hookSpec) string {
 			onErr = "deny"
 		}
 		parts = append(parts, "onError="+onErr)
-	case "PostToolUse":
+	case "PostToolUse", "TurnEnd":
 		if hookIsAsync(h) {
 			parts = append(parts, "asynchrone")
 		} else {

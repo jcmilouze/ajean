@@ -29,6 +29,12 @@ type hookEvent struct {
 	Jean   bool           `json:"jean"`
 	Result string         `json:"result,omitempty"`
 	Error  bool           `json:"error,omitempty"`
+	// TurnEnd seulement : ce que le hook apprend sur le tour qui vient de finir.
+	DurationMs    int64  `json:"durationMs,omitempty"`
+	ToolCalls     int    `json:"toolCalls,omitempty"`
+	ContextTokens int    `json:"contextTokens,omitempty"` // taille du contexte en fin de tour
+	Status        string `json:"status,omitempty"`        // ok | error | stopped
+	Message       string `json:"message,omitempty"`       // texte de l'erreur
 }
 
 // runPreHooks exécute, dans l'ordre, les hooks PreToolUse qui visent cet outil.

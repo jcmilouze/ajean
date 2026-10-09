@@ -15,6 +15,7 @@ const postQueueSize = 256
 // hookJob est un instantané sérialisé : la boucle d'outils peut modifier ses
 // arguments après coup, le hook doit voir ceux de l'appel.
 type hookJob struct {
+	Event   string
 	Tool    string
 	Payload []byte
 }
@@ -79,10 +80,22 @@ func flushPostHooks(timeout time.Duration) bool { return postHookQueue().drain(t
 func hookIsAsync(h hookSpec) bool { return h.Async == nil || *h.Async }
 
 // runPostHooks notifie les hooks PostToolUse. Observation seule : rien n'est
-// renvoyé et un hook ne peut ni refuser ni modifier l'appel. Les hooks
-// asynchrones passent par la file ; ceux marqués "async": false tournent ici.
+// renvoyé et un hook ne peut ni refuser ni modifier l'appel.
 func runPostHooks(ctx context.Context, ev hookEvent) {
 	ev.Event = "PostToolUse"
+	fireObservers(ctx, ev)
+}
+
+// runTurnEndHooks notifie les hooks TurnEnd (fin d'un tour de l'agent). Le
+// matcher porte sur un nom d'outil, qui n'existe pas ici : écrire ".*".
+func runTurnEndHooks(ctx context.Context, ev hookEvent) {
+	ev.Event = "TurnEnd"
+	fireObservers(ctx, ev)
+}
+
+// fireObservers : les hooks asynchrones passent par la file ; ceux marqués
+// "async": false tournent ici.
+func fireObservers(ctx context.Context, ev hookEvent) {
 	specs := matchingHooks(ev.Event, ev.Tool)
 	if len(specs) == 0 {
 		return
@@ -97,17 +110,17 @@ func runPostHooks(ctx context.Context, ev hookEvent) {
 			queued = true
 			continue
 		}
-		logHookError(h, runHookIgnoringDecision(ctx, h, payload))
+		logHookError(ev.Event, h, runHookIgnoringDecision(ctx, h, payload))
 	}
 	if queued {
-		postHookQueue().enqueue(hookJob{Tool: ev.Tool, Payload: payload})
+		postHookQueue().enqueue(hookJob{Event: ev.Event, Tool: ev.Tool, Payload: payload})
 	}
 }
 
 func handlePostJob(j hookJob) {
-	for _, h := range matchingHooks("PostToolUse", j.Tool) {
+	for _, h := range matchingHooks(j.Event, j.Tool) {
 		if hookIsAsync(h) {
-			logHookError(h, runHookIgnoringDecision(context.Background(), h, j.Payload))
+			logHookError(j.Event, h, runHookIgnoringDecision(context.Background(), h, j.Payload))
 		}
 	}
 }
@@ -119,8 +132,8 @@ func runHookIgnoringDecision(ctx context.Context, h hookSpec, payload []byte) er
 	return err
 }
 
-func logHookError(h hookSpec, err error) {
+func logHookError(event string, h hookSpec, err error) {
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[hooks] PostToolUse %q : %v\n", strings.TrimSpace(h.Command), err)
+		fmt.Fprintf(os.Stderr, "[hooks] %s %q : %v\n", event, strings.TrimSpace(h.Command), err)
 	}
 }

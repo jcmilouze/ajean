@@ -904,6 +904,10 @@ func runChat(ctx context.Context, messages []Message, temperature float64, caps 
 	if caps.Jean {
 		ctx = withJeanSpace(ctx)
 	}
+	if rec := startTurnRecorder(ctx); rec != nil {
+		cb = rec.wrap(cb)
+		defer rec.finish(ctx, caps)
+	}
 	var extra []Message
 	tools := withRecallTools(EnabledTools(caps), messages)
 	// Destination des complétions : llama-server local, ou une API OpenAI-compatible
