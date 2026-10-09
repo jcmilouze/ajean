@@ -95,7 +95,12 @@ func runTurnEndHooks(ctx context.Context, ev hookEvent) {
 
 // fireObservers : les hooks asynchrones passent par la file ; ceux marqués
 // "async": false tournent ici.
-func fireObservers(ctx context.Context, ev hookEvent) {
+func fireObservers(ctx context.Context, ev hookEvent) { fireObserversOut(ctx, ev, nil) }
+
+// fireObserversOut est fireObservers, avec en plus la sortie standard des hooks
+// synchrones remise à onOut (nil = ignorée). Les hooks asynchrones n'en ont pas :
+// ils tournent après coup, sans personne pour la lire.
+func fireObserversOut(ctx context.Context, ev hookEvent, onOut func(stdout string)) {
 	specs := matchingHooks(ev.Event, ev.Tool)
 	if len(specs) == 0 {
 		return
@@ -110,7 +115,15 @@ func fireObservers(ctx context.Context, ev hookEvent) {
 			queued = true
 			continue
 		}
-		logHookError(ev.Event, h, runHookIgnoringDecision(ctx, h, payload))
+		if onOut == nil {
+			logHookError(ev.Event, h, runHookIgnoringDecision(ctx, h, payload))
+			continue
+		}
+		out, _, err := execHook(ctx, h, payload)
+		logHookError(ev.Event, h, err)
+		if err == nil {
+			onOut(out)
+		}
 	}
 	if queued {
 		postHookQueue().enqueue(hookJob{Event: ev.Event, Tool: ev.Tool, Payload: payload})

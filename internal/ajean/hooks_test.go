@@ -35,6 +35,9 @@ func TestHookHelperProcess(t *testing.T) {
 	case mode == "deny-json":
 		fmt.Print(`{"decision":"deny","reason":"nope"}`)
 		os.Exit(0)
+	case mode == "advice":
+		fmt.Print(`{"advice":{"preset":"preset-b","label":"Preset B","reason":"debug : qualité"}}`)
+		os.Exit(0)
 	case mode == "deny2":
 		fmt.Fprint(os.Stderr, "interdit")
 		os.Exit(2)

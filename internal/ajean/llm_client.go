@@ -539,6 +539,9 @@ type StreamEvent struct {
 	// REMPLACER son historique par elle (préfixe système injecté retiré), pas l'y
 	// ajouter.
 	NewHistory []Message
+	// Advice : conseil de preset d'un hook UserPromptSubmit synchrone (voir
+	// hooks_prompt.go). Les appelants qui ne l'affichent pas l'ignorent.
+	Advice *AdviceEvent
 }
 type ToolUsedEvent struct {
 	Name   string
@@ -908,7 +911,7 @@ func runChat(ctx context.Context, messages []Message, temperature float64, caps 
 		cb = rec.wrap(cb)
 		defer rec.finish(ctx, caps)
 	}
-	notifyUserPrompt(ctx, messages, caps)
+	notifyUserPrompt(ctx, messages, caps, cb)
 	var extra []Message
 	tools := withRecallTools(EnabledTools(caps), messages)
 	// Destination des complétions : llama-server local, ou une API OpenAI-compatible

@@ -803,6 +803,9 @@ func (c *Conversation) generate(ctx context.Context, caps Caps, temperature floa
 			} else {
 				c.appendDelta(epoch, map[string]any{"error": ev.Err.Error()})
 			}
+		case ev.Advice != nil:
+			c.appendDelta(epoch, map[string]any{"advice": map[string]any{
+				"preset": ev.Advice.Preset, "label": ev.Advice.Label, "reason": ev.Advice.Reason}})
 		case ev.ToolUsed != nil:
 			// Le texte écrit AVANT cet appel d'outil est déjà rangé dans le message
 			// assistant porteur des tool_calls (extra). Le garder aussi dans la

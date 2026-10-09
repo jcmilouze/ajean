@@ -86,6 +86,16 @@ func hookTimeoutSec(h hookSpec) int {
 // runHook lance un hook et renvoie la raison du refus ("" = autorisé), ou une
 // erreur si le hook lui-même a échoué (plantage, délai, sortie illisible).
 func runHook(parent context.Context, h hookSpec, payload []byte) (string, error) {
+	out, refusal, err := execHook(parent, h, payload)
+	if err != nil || refusal != "" {
+		return refusal, err
+	}
+	return parseDecision(out)
+}
+
+// execHook lance le process du hook et renvoie sa sortie standard brute, ou le
+// motif d'un refus par code 2 (lu sur stderr), ou une erreur (plantage, délai).
+func execHook(parent context.Context, h hookSpec, payload []byte) (out, refusal string, err error) {
 	to := hookTimeoutSec(h)
 	ctx, cancel := context.WithTimeout(parent, time.Duration(to)*time.Second)
 	defer cancel()
@@ -97,24 +107,24 @@ func runHook(parent context.Context, h hookSpec, payload []byte) (string, error)
 	// Même garde que runShell : un process laissé en arrière-plan ne doit pas
 	// retenir les tubes, donc le tour, indéfiniment.
 	cmd.WaitDelay = 2 * time.Second
-	err := cmd.Run()
+	runErr := cmd.Run()
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		return "", fmt.Errorf("délai de %ds dépassé", to)
+		return "", "", fmt.Errorf("délai de %ds dépassé", to)
 	}
 	if ctx.Err() != nil {
-		return "", ctx.Err()
+		return "", "", ctx.Err()
 	}
 	var ee *exec.ExitError
-	if errors.As(err, &ee) {
+	if errors.As(runErr, &ee) {
 		if ee.ExitCode() == 2 {
-			return nonEmpty(strings.TrimSpace(stderr.String()), "refusé (code 2)"), nil
+			return "", nonEmpty(strings.TrimSpace(stderr.String()), "refusé (code 2)"), nil
 		}
-		return "", fmt.Errorf("code de sortie %d", ee.ExitCode())
+		return "", "", fmt.Errorf("code de sortie %d", ee.ExitCode())
 	}
-	if err != nil && !errors.Is(err, exec.ErrWaitDelay) {
-		return "", err
+	if runErr != nil && !errors.Is(runErr, exec.ErrWaitDelay) {
+		return "", "", runErr
 	}
-	return parseDecision(stdout.String())
+	return stdout.String(), "", nil
 }
 
 func parseDecision(out string) (string, error) {
