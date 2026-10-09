@@ -110,7 +110,7 @@ Un hook s'exécute avec les droits de l'utilisateur, donc :
 
 ## Questions ouvertes
 - Le terminal (`cli_chat.go`), les tâches planifiées (`tasks_run.go`) et les révisions de Jean (`jean_reflect.go`) appellent tous `runChat` : les hooks s'y appliquent. Les révisions de Jean n'atteignent pas les hooks pour les outils refusés par `isJeanReflecting`.
-- `ajean hooks list|status|test` : non implémenté (tranche 3).
+- `ajean hooks [list | test <outil> ['<json>']]` : implémenté (`hooks_cli.go`). `list` signale les événements inconnus (une faute de frappe désactive un hook en silence) ; `test` rejoue les hooks `PreToolUse` sur un appel simulé sans exécuter l'outil. Pas de sous-commande `status` : les compteurs de la file vivent dans le processus de l'interface, une CLI séparée afficherait toujours zéro. Les exposer demanderait un endpoint dans l'API web.
 - `UserPromptSubmit` : point d'entrée non localisé. Reporté tant qu'il n'est pas identifié.
 - Hooks par projet (`projects/`) : utile, mais pose la question de la confiance dans un dossier de projet. Reporté.
 
