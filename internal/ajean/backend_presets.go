@@ -268,6 +268,7 @@ func safePresetPath(name string) (string, error) {
 //   - BACKUP_AUTO : sauvegarde ajean.link quotidienne. Effacé = elle « se
 //     désactivait toute seule » à chaque changement de preset.
 //   - COMPACT : compactage automatique du contexte (toggle utilisateur).
+//   - COMPACT_AT : seuil de compaction en % de la fenêtre (réglage utilisateur).
 //   - MACHINES : gestion autonome des machines (toggle utilisateur).
 //
 // Les vrais réglages de modèle (BIN, MODEL, CTX, NGL, REASONING…) ne sont PAS ici :
@@ -275,7 +276,7 @@ func safePresetPath(name string) (string, error) {
 // déjà rangées dans le bucket état (bkState), hors config, donc à l'abri.
 var preservedKeys = []string{
 	"MEM_MODE", "CRAWL4AI_URL", "WEB_ENGINE", "CUDA_VISIBLE_DEVICES", "HOST",
-	"MEM_ENCRYPTED", "BACKUP_AUTO", "COMPACT", "MACHINES",
+	"MEM_ENCRYPTED", "BACKUP_AUTO", "COMPACT", "COMPACT_AT", "MACHINES",
 }
 
 // softPreservedKeys : préservées SEULEMENT si le preset d'arrivée ne les définit
