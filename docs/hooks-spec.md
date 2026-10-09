@@ -33,6 +33,15 @@ Les appels refusés par `isJeanReflecting` ou `badArgs` n'atteignent pas le hook
 
 Fichier : `hooks_queue.go` (~60 lignes), séparé de `hooks.go` pour rester sous la limite de 200 lignes par fichier.
 
+## Événement `TurnEnd`
+Notifie un hook quand `runChat` a fini un tour : réponse rendue, erreur ou arrêt demandé. Observation seule, asynchrone par défaut, via la même file que `PostToolUse`.
+
+- **Branchement** : `runChat` enveloppe son callback (`turnRecorder`, `hooks_turn.go`) et notifie au retour par un `defer`. Rien n'est changé à l'intérieur de la boucle d'outils. Tous les appelants sont couverts : interface web, terminal, tâches planifiées.
+- **Exclusion** : la révision de mémoire de Jean (`isJeanReflecting`) est du ménage de fond, pas un tour utilisateur : pas de `TurnEnd`.
+- **Matcher** : il porte sur un nom d'outil, qui n'existe pas ici. Écrire `".*"`.
+- **stdin** : `{"event":"TurnEnd","durationMs":…,"toolCalls":…,"contextTokens":…,"status":"ok|error|stopped","message":"…","jean":false,"cwd":"…"}`. `toolCalls` compte les appels terminés ; `contextTokens` est la taille du contexte en fin de tour (dernier `prompt total + génération` connu, absent si le moteur ne le rapporte pas).
+- **Arrêt demandé** : le contexte du tour est annulé, le statut vaut `stopped`, et le hook est quand même lancé (`context.WithoutCancel`).
+
 ## Configuration
 Fichier : `$AJEAN_HOME/hooks/hooks.json`. Absent = aucun hook, aucun coût.
 
