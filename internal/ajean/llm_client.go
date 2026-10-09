@@ -1766,6 +1766,7 @@ func runChat(ctx context.Context, messages []Message, temperature float64, caps 
 					}
 				}
 				result = capToolResult(result)
+				runPostHooks(ctx, hookEvent{Tool: tc.Function.Name, Args: args, Label: label, Jean: caps.Jean, Result: result, Error: strings.HasPrefix(result, "[erreur]")})
 				shot := ""
 				if !strings.HasPrefix(result, "[erreur]") {
 					doneCalls[callKey] = result
