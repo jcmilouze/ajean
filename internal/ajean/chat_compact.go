@@ -1,12 +1,9 @@
 package ajean
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"regexp"
 	"strconv"
@@ -625,16 +622,6 @@ func renderTranscript(msgs []Message) string {
 	return s
 }
 
-// summarizeResp modélise le sous-ensemble utile d'une réponse non-streamée de
-// /v1/chat/completions.
-type summarizeResp struct {
-	Choices []struct {
-		Message struct {
-			Content string `json:"content"`
-		} `json:"message"`
-	} `json:"choices"`
-}
-
 // compactSystemPrompt : consigne du résumeur. L'ordre des sections compte : le
 // garde-fou de longueur de summarizeTranscript coupe la FIN du résumé, donc
 // l'objectif courant et la prochaine étape passent en premier. Les identifiants
@@ -663,68 +650,13 @@ Rules:
 // Un seul appel NON streamé, sans outils — comme Hermes, on réutilise le modèle
 // principal déjà chargé (aucune dépendance, cohérent avec la fenêtre de contexte).
 func summarizeTranscript(ctx context.Context, transcript string) (string, error) {
-	sys := compactSystemPrompt
-
 	// Budget adapté à la fenêtre (cf. compactSummaryBudget) : porte le fil sans
 	// jamais laisser le résumé enfler au point d'annuler la réduction.
 	budget := compactSummaryBudget()
-
-	ep := resolveChatEndpoint()
-	payload := map[string]any{
-		"model": ep.Model,
-		"messages": []Message{
-			{Role: "system", Content: sys},
-			{Role: "user", Content: transcript},
-		},
-		"stream":      false,
-		"temperature": 0.2,
-		// Borne dure : sans ça, un modèle bavard (surtout à reasoning) produit un
-		// résumé énorme et lent, donc peu de réduction → re-compaction à chaque tour.
-		"max_tokens": budget,
-	}
-	// Pas de réflexion pour un résumé : plus rapide, plus dense, et évite qu'un
-	// modèle hybride gaspille tout le budget en <think> (résumé vide). llama.cpp
-	// passe ces kwargs au gabarit Jinja (--jinja). Champ propre à llama.cpp : on ne
-	// l'envoie PAS à une API externe (OpenAI le rejetterait en 400).
-	if !ep.External {
-		payload["chat_template_kwargs"] = map[string]any{"enable_thinking": false}
-	}
-	body, _ := json.Marshal(payload)
-	req, err := http.NewRequestWithContext(ctx, "POST", ep.URL, bytes.NewReader(body))
+	c, err := chatOnce(ctx, chatOnceReq{System: compactSystemPrompt, User: transcript, MaxTokens: budget, Temperature: 0.2, ErrPrefix: "résumé"})
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	if ep.External {
-		if ep.Key != "" {
-			req.Header.Set("Authorization", "Bearer "+ep.Key)
-		}
-	} else {
-		authHeader(req)
-	}
-	resp, err := doLLM(ctx, req, body, ep)
-	if err != nil {
-		return "", friendlyLLMError(err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, 500))
-		return "", fmt.Errorf("résumé: llama-server %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
-	}
-	var out summarizeResp
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", err
-	}
-	if len(out.Choices) == 0 {
-		return "", fmt.Errorf("résumé: réponse vide")
-	}
-	c := out.Choices[0].Message.Content
-	// Certains modèles à raisonnement préfixent un bloc <think>…</think> : on ne
-	// garde que la réponse finale.
-	if i := strings.LastIndex(c, thinkClose); i >= 0 {
-		c = c[i+len(thinkClose):]
-	}
-	c = strings.TrimSpace(c)
 	// Garde-fou dur : même si le modèle ignore la consigne de longueur, on tronque
 	// pour garantir une vraie compression. La coupe suit le budget (≈ 4 car./token)
 	// au lieu d'un 2200 fixe : le résumé doit porter les FAITS déjà trouvés, pas
