@@ -58,6 +58,12 @@ const (
 	// Windows, PREBUILT_ASSET). Il lui manque seulement remote-drop (moeEngineHasDrop).
 	moeWinReleaseBase = "https://github.com/Niko1221/Strata/releases/download/v0.1.41/"
 	moeWinEngineAsset = "strata-windows-x64.zip"
+
+	// Les sources du paquet 1.0 étaient hébergées sur la release de l'amont d'AJEAN,
+	// devenue inaccessible (404) : sous Windows on prend celles de Strata v0.1.41.
+	moeWinSrcAsset = "Strata-0.1.41.tar.gz"
+	moeWinSrcURL   = "https://github.com/Niko1221/Strata/archive/refs/tags/v0.1.41.tar.gz"
+	moeWinSrcTop   = "Strata-0.1.41"
 )
 
 // moeAssetSHA : empreintes des fichiers de la release, vérifiées avant usage.
@@ -65,11 +71,15 @@ var moeAssetSHA = map[string]string{
 	moeSrcAsset:       "5747f69426973d957e4f9894a8e3333c6ef0d6ac8565e26ddb8d36f52211cb3b",
 	moeEngineAsset:    "b5851bc138ab32ca3ffefc16bf91c8f557e4d503503473a22f2b6c9e9b8fd34c",
 	moeWinEngineAsset: "3dd7715f4844c0f9d2f28eb5067af0198f386df060c93523cd17e1d65b757f13",
+	moeWinSrcAsset:    "ab48b29e6c9177b339bddc3479621d193c4116105901d419f7df7f4edea89be2",
 }
 
 // moeAssetURL : d'où vient un fichier figé (notre release, ou celle de l'amont
 // pour le moteur Windows).
 func moeAssetURL(asset string) string {
+	if asset == moeWinSrcAsset {
+		return moeWinSrcURL
+	}
 	if asset == moeWinEngineAsset {
 		return moeWinReleaseBase + asset
 	}
@@ -621,7 +631,11 @@ func moeRunInstall(req moeInstallReq) {
 	}
 
 	// 1. le paquet figé : sources (installeur + serveur) et moteur compilé
-	src, err := moeFetch(moeSrcAsset)
+	srcAsset := moeSrcAsset
+	if runtime.GOOS == "windows" {
+		srcAsset = moeWinSrcAsset
+	}
+	src, err := moeFetch(srcAsset)
 	if err != nil {
 		lcFail(err)
 		return
@@ -637,6 +651,12 @@ func moeRunInstall(req moeInstallReq) {
 		if err := extractArchive(src, moeHome()); err != nil {
 			lcFail(fmt.Errorf("décompression : %w", err))
 			return
+		}
+		if srcAsset == moeWinSrcAsset {
+			if err := os.Rename(filepath.Join(moeHome(), moeWinSrcTop), moeSrcDir()); err != nil {
+				lcFail(err)
+				return
+			}
 		}
 	}
 	// L'installeur prend le moteur dans un dossier local (--prebuilt) : il le
