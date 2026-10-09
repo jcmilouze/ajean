@@ -53,10 +53,10 @@ const (
 	moeEngineLocal = "strata-linux-x64-cuda12.zip"
 
 	// Windows : pas de moteur compilé par nous. Les sources du paquet sont celles
-	// de l'amont v0.1.39 sans changement ; on prend donc son moteur Windows de la
-	// même version, en CUDA 13 (le moteur prêt à l'emploi de l'installeur sous
+	// de l'amont v0.1.39 sans changement ; on prend son moteur Windows en v0.1.41
+	// (même base de code), en CUDA 13 (le moteur prêt à l'emploi de l'installeur sous
 	// Windows, PREBUILT_ASSET). Il lui manque seulement remote-drop (moeEngineHasDrop).
-	moeWinReleaseBase = "https://github.com/Niko1221/Strata/releases/download/v0.1.39/"
+	moeWinReleaseBase = "https://github.com/Niko1221/Strata/releases/download/v0.1.41/"
 	moeWinEngineAsset = "strata-windows-x64.zip"
 )
 
@@ -64,7 +64,7 @@ const (
 var moeAssetSHA = map[string]string{
 	moeSrcAsset:       "5747f69426973d957e4f9894a8e3333c6ef0d6ac8565e26ddb8d36f52211cb3b",
 	moeEngineAsset:    "b5851bc138ab32ca3ffefc16bf91c8f557e4d503503473a22f2b6c9e9b8fd34c",
-	moeWinEngineAsset: "a862bcfa2330cd1c23f9b5d6e49f4027da8f8313842bd62e858ec6cd4533813a",
+	moeWinEngineAsset: "3dd7715f4844c0f9d2f28eb5067af0198f386df060c93523cd17e1d65b757f13",
 }
 
 // moeAssetURL : d'où vient un fichier figé (notre release, ou celle de l'amont
@@ -761,8 +761,10 @@ var reUpstreamName = regexp.MustCompile(`(?i)strata`)
 
 // moeNeutral retire le nom du moteur amont d'une ligne de journal.
 func moeNeutral(line string) string {
-	// le binaire annonce sa version d'origine (« engine 0.1.39 ») : c'est la 1.0 d'AJEAN MoE
-	line = strings.ReplaceAll(line, "engine 0.1.39", "AJEAN MoE "+moeVersion)
+	// le binaire annonce sa version d'origine (« engine 0.1.39 » ou « engine 0.1.41 ») : c'est la 1.0 d'AJEAN MoE
+	for _, v := range []string{"0.1.39", "0.1.41"} {
+		line = strings.ReplaceAll(line, "engine "+v, "AJEAN MoE "+moeVersion)
+	}
 	return reUpstreamName.ReplaceAllString(line, "moteur")
 }
 
