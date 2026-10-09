@@ -4175,6 +4175,14 @@ fr: {
   "advice.toggle": "Conseil de modèle",
   "advice.on": "Conseil de modèle activé",
   "advice.off": "Conseil de modèle désactivé",
+  "advice.switch_to": "Passer sur ",
+  "advice.ignore": "Ignorer",
+  "advice.title": "Changer de preset",
+  "advice.confirm_prefix": "Passer sur « ",
+  "advice.confirm_suffix": " » ? Le tour en cours sera arrêté, le modèle rechargé (environ 1 minute) et ta demande remise dans le champ.",
+  "advice.ok": "Basculer",
+  "advice.unknown": "Preset conseillé introuvable",
+  "advice.restored": "Demande remise dans le champ : Entrée quand le modèle est prêt",
   "common.error_prefix": "erreur : ",
   "chat.loading_conversation": "chargement de la conversation…",
   "chat.send_hint_newline_mode": "Entrée = nouvelle ligne · Maj+Entrée pour envoyer",
@@ -5525,6 +5533,14 @@ en: {
   "advice.toggle": "Model advice",
   "advice.on": "Model advice on",
   "advice.off": "Model advice off",
+  "advice.switch_to": "Switch to ",
+  "advice.ignore": "Dismiss",
+  "advice.title": "Change preset",
+  "advice.confirm_prefix": "Switch to \"",
+  "advice.confirm_suffix": "\"? The current turn will be stopped, the model reloaded (about 1 minute) and your request put back in the input box.",
+  "advice.ok": "Switch",
+  "advice.unknown": "Advised preset not found",
+  "advice.restored": "Request put back in the input box: press Enter when the model is ready",
   "common.error_prefix": "error: ",
   "chat.loading_conversation": "loading the conversation…",
   "chat.send_hint_newline_mode": "Enter = new line · Shift+Enter to send",
@@ -7098,8 +7114,8 @@ async function runBenchUI(){
     loadPresets();
   }
 }
-async function switchTo(n,name,id){
-  if(!await askConfirm(t('models.switch_confirm_prefix')+name+t('models.switch_confirm_suffix'), {title:t('models.switch_title'), okText:t('models.switch_ok')})) return;
+async function switchTo(n,name,id,skipConfirm){
+  if(!skipConfirm && !await askConfirm(t('models.switch_confirm_prefix')+name+t('models.switch_confirm_suffix'), {title:t('models.switch_title'), okText:t('models.switch_ok')})) return;
   toast(t('models.switching'));
   pendingPreset = n; loadPresets();
   const r=await jpost('/api/switch',id?{id:id}:{n:n});
@@ -9260,7 +9276,9 @@ function handleDelta(d){
     newTurn(); setCtxUsed(0); setCompactCount(0); lastSeq=0; setBusy(false); return; }
   if(d.history_more!==undefined){ showHistoryMore(d.history_more, d.before); return; }
   if(d.suggestions){ showSuggestions(d.suggestions); return; }
+  if(d.advice){ showAdvice(d.advice); return; }
   if(d.user!==undefined){
+    ADVICE_PROMPT = (typeof d.user === 'string') ? d.user : '';
     hideSuggestions();
     histRefreshSoon();
     newTurn();
@@ -11061,6 +11079,47 @@ async function togglePromptHook(){
   }catch(e){ toast(t('common.error_prefix') + (e.message || e)); }
 }
 loadPromptHook();
+let ADVICE_PROMPT = ''; 
+function showAdvice(a){
+  const bar = document.getElementById('cap-bar');
+  if(!bar || !a || !a.preset) return;
+  if(a.preset === ACTIVE_PRESET_ID) return;
+  bar.textContent = '';
+  const go = document.createElement('button');
+  go.type = 'button';
+  go.textContent = t('advice.switch_to') + (a.label || a.preset);
+  if(a.reason) go.title = a.reason;
+  go.onclick = ()=>applyAdvice(a);
+  bar.appendChild(go);
+  const skip = document.createElement('button');
+  skip.type = 'button'; skip.className = 'cap-more';
+  skip.textContent = t('advice.ignore');
+  skip.onclick = hideSuggestions;
+  bar.appendChild(skip);
+  bar.classList.add('show');
+}
+async function applyAdvice(a){
+  hideSuggestions();
+  let list = [];
+  try{ list = await jget('/api/presets'); }catch(e){}
+  const i = list.findIndex(p=>p.id === a.preset);
+  if(i < 0){ toast(t('advice.unknown')); return; }
+  const name = list[i].name;
+  const ok = await askConfirm(t('advice.confirm_prefix') + name + t('advice.confirm_suffix'),
+    {title:t('advice.title'), okText:t('advice.ok')});
+  if(!ok) return;
+  if(busy){
+    stopGen();
+    await new Promise(r=>setTimeout(r, 800)); 
+  }
+  await switchTo(i+1, name, list[i].id, true);
+  const ta = document.getElementById('input');
+  if(ta && ADVICE_PROMPT && !ta.value.trim()){
+    ta.value = ADVICE_PROMPT;
+    autoGrow(ta); syncSendBtn(); ta.focus();
+    toast(t('advice.restored'));
+  }
+}
 let tasksList = [];
 let taskEditing = null; 
 let TASK_RUNNING = '';  

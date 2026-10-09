@@ -43,8 +43,8 @@ async function runBenchUI(){
     loadPresets();
   }
 }
-async function switchTo(n,name,id){
-  if(!await askConfirm(t('models.switch_confirm_prefix')+name+t('models.switch_confirm_suffix'), {title:t('models.switch_title'), okText:t('models.switch_ok')})) return;
+async function switchTo(n,name,id,skipConfirm){
+  if(!skipConfirm && !await askConfirm(t('models.switch_confirm_prefix')+name+t('models.switch_confirm_suffix'), {title:t('models.switch_title'), okText:t('models.switch_ok')})) return;
   toast(t('models.switching'));
   // Retour visuel IMMÉDIAT : la ligne visée s'allume et clignote. Le serveur met
   // plusieurs secondes à redémarrer le service ; sans ça la liste ne bougeait pas

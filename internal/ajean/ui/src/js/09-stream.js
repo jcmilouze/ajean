@@ -607,7 +607,10 @@ function handleDelta(d){
   // Suites possibles (cap.go) : publiées après la fin d'une tâche. Un message suivant
   // (d.user) les masque, y compris au rejeu du journal.
   if(d.suggestions){ showSuggestions(d.suggestions); return; }
+  // Conseil de preset d'un hook UserPromptSubmit (voir 14f-advice.js).
+  if(d.advice){ showAdvice(d.advice); return; }
   if(d.user!==undefined){
+    ADVICE_PROMPT = (typeof d.user === 'string') ? d.user : '';
     hideSuggestions();
     histRefreshSoon();
     newTurn();
