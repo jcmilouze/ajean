@@ -126,7 +126,8 @@ type scriptInfo struct {
 // d'avec le workspace jetable, pas d'un verrou.
 // La mémoire du mode Jean (memory/_jean) en fait partie : sinon bash/write/edit
 // la lisaient ou la modifiaient en contournant ses outils et leurs garde-fous.
-func toolOnlyDirs() []string { return []string{memoryDir(), jeanDir()} }
+// hooks/ en fait partie : un garde-fou que le modèle pourrait réécrire n'en est pas un.
+func toolOnlyDirs() []string { return []string{memoryDir(), jeanDir(), hooksDir()} }
 
 // toolOnlyLabel donne le nom des outils à utiliser à la place d'un accès direct
 // (seule la mémoire est concernée aujourd'hui, voir toolOnlyDirs).
