@@ -438,6 +438,7 @@ function syncSendBtn(){
   // n'aurait aucun moyen d'ajouter en cours de route). Composeur vide + libre = ni
   // l'un ni l'autre n'est utile → on garde « envoyer » (désactivé) comme avant.
   const hasContent=composerHasContent();
+  if(hasContent) hideSuggestions(); // l'utilisateur écrit : les suites proposées n'ont plus lieu d'être
   const showSend = !busy || hasContent;
   // Superposés (#sendwrap) : on bascule l'un vers l'autre en fondu, sans display.
   sb.classList.toggle('is-off', !showSend);
@@ -600,9 +601,14 @@ function handleDelta(d){
     // MASQUÉ, et caught_up le révèle en fondu, déjà positionné en bas. Sinon on le
     // voyait se remplir puis sauter. Nouveau fil vide : simple fondu d'entrée.
     if(d.replay) hideChatForReplay(); else chatClearAnimated();
+    hideSuggestions();
     newTurn(); setCtxUsed(0); setCompactCount(0); lastSeq=0; setBusy(false); return; }
   if(d.history_more!==undefined){ showHistoryMore(d.history_more, d.before); return; }
+  // Suites possibles (cap.go) : publiées après la fin d'une tâche. Un message suivant
+  // (d.user) les masque, y compris au rejeu du journal.
+  if(d.suggestions){ showSuggestions(d.suggestions); return; }
   if(d.user!==undefined){
+    hideSuggestions();
     histRefreshSoon();
     newTurn();
     let el=confirmPending(d.user);

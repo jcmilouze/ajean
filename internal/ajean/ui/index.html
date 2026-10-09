@@ -998,6 +998,18 @@ h1{color:var(--text);font-weight:600;letter-spacing:-.01em}
   padding:0 2px 8px;max-height:33vh;overflow-y:auto}
 #attach-list.show{display:flex}
 #composer:has(#attach-list.show){padding-top:6px}
+#cap-bar{order:0;display:none;flex-wrap:wrap;align-items:center;gap:6px;margin:0 var(--col);padding:0 2px 8px}
+#cap-bar.show{display:flex}
+#composer:has(#cap-bar.show){padding-top:6px}
+#cap-bar button{pointer-events:auto;max-width:100%;margin:0;padding:6px 12px;border:1px solid var(--border);border-radius:999px;
+  background:var(--panel);color:var(--text);font-size:12px;line-height:1.3;text-align:left;
+  transition:background .16s ease,transform .12s ease}
+#cap-bar button:hover{background:var(--row-bg-on)}
+#cap-bar button:active{transform:scale(.97)}
+#cap-bar .cap-more{color:var(--dim);background:transparent}
+#cap-bar.show button{animation:cap-in .22s var(--ease) both}
+@keyframes cap-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){#cap-bar.show button{animation:none}}
 #attach-list .chip-file{flex:0 0 auto;background:var(--panel);border-color:var(--border);
   box-shadow:0 2px 10px rgba(0,0,0,.10)}
 .chip-file{display:flex;align-items:center;gap:8px;max-width:230px;min-width:0;
@@ -2025,6 +2037,7 @@ body.jean-mode #ctx-compactions{display:none!important}
         <input type="file" id="attach-input" multiple style="display:none" onchange="onAttachPick(event)">
       </span>
     </div>
+    <div id="cap-bar" role="group" aria-label="Suites possibles" data-i18n="cap.bar_title" data-i18n-attr="aria-label"></div>
     <div id="attach-list"></div>
     <div id="inputbar">
       <textarea id="input" rows="1" placeholder="Discuter avec Jean" onkeydown="onKey(event)" oninput="autoGrow(this);syncSendBtn()" onpaste="onPaste(event)" data-i18n="chat.input_placeholder" data-i18n-attr="placeholder"></textarea>
@@ -4153,6 +4166,12 @@ fr: {
   "chat.improve_busy": "Amélioration du prompt…",
   "chat.improve_failed": "amélioration impossible",
   "chat.improve_restore": "Rétablir le texte d'origine",
+  "cap.bar_title": "Suites possibles",
+  "cap.other": "Autre…",
+  "cap.hide": "Masquer",
+  "cap.toggle": "Suggestions de suite",
+  "cap.on": "Suggestions de suite activées",
+  "cap.off": "Suggestions de suite désactivées",
   "common.error_prefix": "erreur : ",
   "chat.loading_conversation": "chargement de la conversation…",
   "chat.send_hint_newline_mode": "Entrée = nouvelle ligne · Maj+Entrée pour envoyer",
@@ -5494,6 +5513,12 @@ en: {
   "chat.improve_busy": "Improving the prompt…",
   "chat.improve_failed": "could not improve it",
   "chat.improve_restore": "Restore the original text",
+  "cap.bar_title": "Possible next steps",
+  "cap.other": "Other…",
+  "cap.hide": "Hide",
+  "cap.toggle": "Next-step suggestions",
+  "cap.on": "Next-step suggestions on",
+  "cap.off": "Next-step suggestions off",
   "common.error_prefix": "error: ",
   "chat.loading_conversation": "loading the conversation…",
   "chat.send_hint_newline_mode": "Enter = new line · Shift+Enter to send",
@@ -9144,6 +9169,7 @@ function syncSendBtn(){
   const sb=document.getElementById('send');
   const stop=document.getElementById('stop');
   const hasContent=composerHasContent();
+  if(hasContent) hideSuggestions(); 
   const showSend = !busy || hasContent;
   sb.classList.toggle('is-off', !showSend);
   stop.classList.toggle('is-off', !(busy && !hasContent));
@@ -9224,9 +9250,12 @@ function handleDelta(d){
     histRefreshSoon();
     TURN_ENDED=true; elapsedStop(); smoothReset(); if(renderTimer){ clearTimeout(renderTimer); renderTimer=null; } renderPending=null; PENDS=[];
     if(d.replay) hideChatForReplay(); else chatClearAnimated();
+    hideSuggestions();
     newTurn(); setCtxUsed(0); setCompactCount(0); lastSeq=0; setBusy(false); return; }
   if(d.history_more!==undefined){ showHistoryMore(d.history_more, d.before); return; }
+  if(d.suggestions){ showSuggestions(d.suggestions); return; }
   if(d.user!==undefined){
+    hideSuggestions();
     histRefreshSoon();
     newTurn();
     let el=confirmPending(d.user);
@@ -10950,6 +10979,63 @@ function restoreImprovedPrompt(){
   IMPROVE_BACKUP = null;
   autoGrow(ta); syncSendBtn(); ta.focus();
 }
+let CAP_ON = false;
+function showSuggestions(list){
+  const bar = document.getElementById('cap-bar');
+  if(!bar || !Array.isArray(list) || !list.length) return;
+  if(typeof composerHasContent === 'function' && composerHasContent()) return;
+  bar.textContent = '';
+  for(const text of list.slice(0, 3)){
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = text;
+    b.onclick = ()=>pickSuggestion(text);
+    bar.appendChild(b);
+  }
+  const other = document.createElement('button');
+  other.type = 'button'; other.className = 'cap-more';
+  other.textContent = t('cap.other');
+  other.onclick = ()=>{ hideSuggestions(); const ta = document.getElementById('input'); if(ta) ta.focus(); };
+  bar.appendChild(other);
+  const hide = document.createElement('button');
+  hide.type = 'button'; hide.className = 'cap-more';
+  hide.textContent = t('cap.hide');
+  hide.onclick = hideSuggestions;
+  bar.appendChild(hide);
+  bar.classList.add('show');
+}
+function hideSuggestions(){
+  const bar = document.getElementById('cap-bar');
+  if(!bar) return;
+  bar.classList.remove('show');
+  bar.textContent = '';
+}
+function pickSuggestion(text){
+  hideSuggestions();
+  const ta = document.getElementById('input');
+  ta.value = text;
+  autoGrow(ta); syncSendBtn();
+  send();
+}
+async function loadCap(){
+  try{
+    const r = await jfetch('/api/cap');
+    const j = await r.json().catch(()=>({}));
+    if(j.ok) CAP_ON = !!j.on;
+  }catch(e){   }
+}
+async function toggleCap(){
+  const want = !CAP_ON;
+  try{
+    const r = await jfetch('/api/cap', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({on:want})});
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok || !j.ok){ toast(j.error || t('common.error_prefix')); return; }
+    CAP_ON = !!j.on;
+    if(!CAP_ON) hideSuggestions();
+    toast(t(CAP_ON ? 'cap.on' : 'cap.off'));
+  }catch(e){ toast(t('common.error_prefix') + (e.message || e)); }
+}
+loadCap();
 let tasksList = [];
 let taskEditing = null; 
 let TASK_RUNNING = '';  
@@ -11504,6 +11590,7 @@ const PLUS_IC = {
   clear:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>',
   compact:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9l4-4 4 4M20 15l-4 4-4-4M8 5v6M16 19v-6"/></svg>',
   improve:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3l1.9 5.1L18 10l-5.1 1.9L11 17l-1.9-5.1L4 10l5.1-1.9z"/><path d="M19 15l.7 1.8 1.8.7-1.8.7L19 20l-.7-1.8-1.8-.7 1.8-.7z"/></svg>',
+  cap:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
 };
 const closePlusMenu = ()=>closeMenu();
 function togglePlusMenu(e){
@@ -11513,6 +11600,7 @@ function togglePlusMenu(e){
     MODE==='jean' && {icon:PLUS_IC.mem, label:t('jean.mem_title'), run:openJeanMem},
     {icon:PLUS_IC.improve, label:t('chat.improve_prompt'), disabled:!document.getElementById('input').value.trim(), run:improvePrompt},
     canRestoreImprovedPrompt() && {icon:PLUS_IC.clear, label:t('chat.improve_restore'), run:restoreImprovedPrompt},
+    MODE!=='jean' && {icon:PLUS_IC.cap, label:t('cap.toggle'), on:CAP_ON, run:toggleCap},
     {icon:PLUS_IC.file, label:t('projects.attach_file'), run:()=>document.getElementById('attach-input').click()},
     MODE==='jean' ? {icon:PLUS_IC.clear, label:t('jean.clear_ctx'), run:clearJeanContext}
                   : {icon:PLUS_IC.chat, label:t('chat.new_chat_btn'), run:newChatFromTop},

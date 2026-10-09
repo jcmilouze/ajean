@@ -175,6 +175,7 @@ const PLUS_IC = {
   clear:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>',
   compact:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9l4-4 4 4M20 15l-4 4-4-4M8 5v6M16 19v-6"/></svg>',
   improve:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3l1.9 5.1L18 10l-5.1 1.9L11 17l-1.9-5.1L4 10l5.1-1.9z"/><path d="M19 15l.7 1.8 1.8.7-1.8.7L19 20l-.7-1.8-1.8-.7 1.8-.7z"/></svg>',
+  cap:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
 };
 const closePlusMenu = ()=>closeMenu();
 function togglePlusMenu(e){
@@ -184,6 +185,7 @@ function togglePlusMenu(e){
     MODE==='jean' && {icon:PLUS_IC.mem, label:t('jean.mem_title'), run:openJeanMem},
     {icon:PLUS_IC.improve, label:t('chat.improve_prompt'), disabled:!document.getElementById('input').value.trim(), run:improvePrompt},
     canRestoreImprovedPrompt() && {icon:PLUS_IC.clear, label:t('chat.improve_restore'), run:restoreImprovedPrompt},
+    MODE!=='jean' && {icon:PLUS_IC.cap, label:t('cap.toggle'), on:CAP_ON, run:toggleCap},
     {icon:PLUS_IC.file, label:t('projects.attach_file'), run:()=>document.getElementById('attach-input').click()},
     // Mode Jean : une seule conversation, on n'en ouvre pas d'autre, on vide le contexte.
     MODE==='jean' ? {icon:PLUS_IC.clear, label:t('jean.clear_ctx'), run:clearJeanContext}

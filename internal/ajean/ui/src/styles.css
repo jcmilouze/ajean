@@ -1657,6 +1657,20 @@ h1{color:var(--text);font-weight:600;letter-spacing:-.01em}
   padding:0 2px 8px;max-height:33vh;overflow-y:auto}
 #attach-list.show{display:flex}
 #composer:has(#attach-list.show){padding-top:6px}
+/* Suites possibles (Cap) : même bande, même principe que les pièces jointes. Le
+   composeur a pointer-events:none, les pastilles le rétablissent. */
+#cap-bar{order:0;display:none;flex-wrap:wrap;align-items:center;gap:6px;margin:0 var(--col);padding:0 2px 8px}
+#cap-bar.show{display:flex}
+#composer:has(#cap-bar.show){padding-top:6px}
+#cap-bar button{pointer-events:auto;max-width:100%;margin:0;padding:6px 12px;border:1px solid var(--border);border-radius:999px;
+  background:var(--panel);color:var(--text);font-size:12px;line-height:1.3;text-align:left;
+  transition:background .16s ease,transform .12s ease}
+#cap-bar button:hover{background:var(--row-bg-on)}
+#cap-bar button:active{transform:scale(.97)}
+#cap-bar .cap-more{color:var(--dim);background:transparent}
+#cap-bar.show button{animation:cap-in .22s var(--ease) both}
+@keyframes cap-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){#cap-bar.show button{animation:none}}
 /* Posées sur le fil (et non sur la carte) : il leur faut un fond opaque et un
    cadre, sinon le texte de la conversation transparaît derrière. */
 #attach-list .chip-file{flex:0 0 auto;background:var(--panel);border-color:var(--border);

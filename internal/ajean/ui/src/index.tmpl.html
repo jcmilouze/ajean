@@ -491,6 +491,9 @@
     <!-- Pièces jointes en attente : remplie par addFiles(), vidée à l'envoi.
          Petites bulles POSÉES AU-DESSUS de la carte, dans la bande de dégradé
          qui la sépare du fil — la carte ne bouge donc pas d'un pixel. -->
+    <!-- Suites possibles (« Cap », cap.go) : trois pastilles cliquables posées dans la
+         même bande que les pièces jointes, à la fin d'une tâche. Rempli par showSuggestions(). -->
+    <div id="cap-bar" role="group" aria-label="Suites possibles" data-i18n="cap.bar_title" data-i18n-attr="aria-label"></div>
     <div id="attach-list"></div>
     <div id="inputbar">
       <textarea id="input" rows="1" placeholder="Discuter avec Jean" onkeydown="onKey(event)" oninput="autoGrow(this);syncSendBtn()" onpaste="onPaste(event)" data-i18n="chat.input_placeholder" data-i18n-attr="placeholder"></textarea>
