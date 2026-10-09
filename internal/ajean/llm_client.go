@@ -1586,6 +1586,13 @@ func runChat(ctx context.Context, messages []Message, temperature float64, caps 
 					extra = append(extra, toolMsg)
 					continue
 				}
+				if denied := runPreHooks(ctx, hookEvent{Tool: tc.Function.Name, Args: args, Label: label, Jean: caps.Jean}); denied != "" {
+					cb(StreamEvent{ToolUsed: fillToolResult(&ToolUsedEvent{Name: tc.Function.Name, Label: label, Done: true, ArgToks: flushArgToks()}, denied)})
+					toolMsg := Message{Role: "tool", ToolCallID: tc.ID, Content: denied}
+					messages = append(messages, toolMsg)
+					extra = append(extra, toolMsg)
+					continue
+				}
 				// Mode Jean : les outils task_* travaillent sur les tâches de Jean (pas
 				// celles du projet actif), et une tâche créée parlera dans son fil.
 				if caps.Jean && args != nil && strings.HasPrefix(tc.Function.Name, "task_") {
