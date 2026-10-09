@@ -261,6 +261,43 @@ func TestMoePresetName(t *testing.T) {
 	}
 }
 
+func TestMoeCoderEtUnsloth(t *testing.T) {
+	for _, c := range []struct{ fam, quant, tag, preset string }{
+		{"coder", "IQ1_M", "coder-IQ1_M", "FLASH NEXT CODER IQ1_M"},
+		{"unsloth", "UD-IQ4_XS", "unsloth-UD-IQ4_XS", "FLASH NEXT UNSLOTH UD-IQ4_XS"},
+		{"qwen", "IQ3_S", "IQ3_S", "FLASH NEXT CLASSIQUE IQ3_S"},
+	} {
+		if got := moeTag(c.fam, c.quant); got != c.tag {
+			t.Errorf("moeTag(%s,%s) = %q, attendu %q", c.fam, c.quant, got, c.tag)
+		}
+		if got := moePresetName(c.fam, c.quant); got != c.preset {
+			t.Errorf("moePresetName(%s,%s) = %q, attendu %q", c.fam, c.quant, got, c.preset)
+		}
+		if _, ok := moeQuants[c.quant]; !ok {
+			t.Errorf("quant %s absent du catalogue", c.quant)
+		}
+	}
+}
+
+func TestMoeFindConfigNomExact(t *testing.T) {
+	t.Setenv("AJEAN_HOME", t.TempDir())
+	_ = os.MkdirAll(moeSrcDir(), 0o755)
+	for _, n := range []string{"strata-iq3_xxs.json", "strata-swift-iq3_xxs.json"} {
+		_ = os.WriteFile(filepath.Join(moeSrcDir(), n), []byte("{}"), 0o644)
+	}
+	got, err := moeFindConfig("swift-IQ3_XXS")
+	if err != nil || filepath.Base(got) != "strata-swift-iq3_xxs.json" {
+		t.Fatalf("swift : %q, %v", got, err)
+	}
+	got, err = moeFindConfig("IQ3_XXS")
+	if err != nil || filepath.Base(got) != "strata-iq3_xxs.json" {
+		t.Fatalf("classique : %q, %v", got, err)
+	}
+	if _, err := moeFindConfig("coder-IQ1_M"); err == nil {
+		t.Fatal("config absente acceptée")
+	}
+}
+
 func TestMoeNeutral(t *testing.T) {
 	upstream := "Str" + "ata"
 	if got := moeNeutral("  [ok] " + upstream + " engine copied to /x/" + strings.ToLower(upstream) + "-0.1.39"); strings.Contains(strings.ToLower(got), strings.ToLower(upstream)) {

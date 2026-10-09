@@ -134,13 +134,17 @@ type moeQuant struct {
 var moeFamilies = []moeFamily{
 	{ID: "swift", Label: "Swift 1.5", About: "réfléchit moins, répond plus vite", Quants: []string{"IQ2_XS", "IQ3_XXS"}},
 	{ID: "qwen", Label: "Classique", About: "le Qwen3.8-Flash-Next original", Quants: []string{"Q2_0", "IQ2_XS", "IQ3_XXS", "IQ3_S"}},
+	{ID: "coder", Label: "Coder", About: "la moitié des experts (code, outils, images) : moins de RAM, plus rapide, plus faible hors code", Quants: []string{"IQ1_M"}},
+	{ID: "unsloth", Label: "Unsloth", About: "quantification ~4 bits d'Unsloth, entre IQ3_S et le Q4 complet en qualité", Quants: []string{"UD-IQ4_XS"}},
 }
 
 var moeQuants = map[string]moeQuant{
-	"Q2_0":    {ID: "Q2_0", About: "le plus rapide", DownloadGB: 66.4, ArenaGB: 34.0},
-	"IQ2_XS":  {ID: "IQ2_XS", About: "un peu plus fidèle, presque aussi rapide", DownloadGB: 68.0, ArenaGB: 35.5},
-	"IQ3_XXS": {ID: "IQ3_XXS", About: "99 % de la qualité du modèle complet", DownloadGB: 75.8, ArenaGB: 42.9},
-	"IQ3_S":   {ID: "IQ3_S", About: "la meilleure qualité, le plus lent", DownloadGB: 83.6, ArenaGB: 50.3},
+	"Q2_0":      {ID: "Q2_0", About: "le plus rapide", DownloadGB: 66.4, ArenaGB: 34.0},
+	"IQ2_XS":    {ID: "IQ2_XS", About: "un peu plus fidèle, presque aussi rapide", DownloadGB: 68.0, ArenaGB: 35.5},
+	"IQ3_XXS":   {ID: "IQ3_XXS", About: "99 % de la qualité du modèle complet", DownloadGB: 75.8, ArenaGB: 42.9},
+	"IQ3_S":     {ID: "IQ3_S", About: "la meilleure qualité, le plus lent", DownloadGB: 83.6, ArenaGB: 50.3},
+	"IQ1_M":     {ID: "IQ1_M", About: "la seule taille du Coder", DownloadGB: 58.4, ArenaGB: 23.4},
+	"UD-IQ4_XS": {ID: "UD-IQ4_XS", About: "~4 bits : une partie des experts est lue sur le disque sous ~80 Go de RAM", DownloadGB: 93.7, ArenaGB: 59.5},
 }
 
 // moeLowRAMHeadroomGB : RAM à laisser à côté des experts (OS, moteur,
@@ -323,10 +327,11 @@ func moeVenvPython(srcDir string) string {
 }
 
 // moeTag : le nom que l'installeur donne aux dossiers d'un choix
-// (models/<tag>, packs/<tag en minuscules>) : « swift-IQ3_XXS », « IQ3_XXS ».
+// (models/<tag>, packs/<tag en minuscules>) : « swift-IQ3_XXS », « coder-IQ1_M », « IQ3_XXS ».
 func moeTag(family, quant string) string {
-	if family == "swift" {
-		return "swift-" + quant
+	switch family {
+	case "swift", "coder", "unsloth":
+		return family + "-" + quant
 	}
 	return quant
 }
@@ -534,6 +539,9 @@ func moeRecommend(family string, env moeEnv) string {
 			break
 		}
 	}
+	if best == "" && len(fam.Quants) == 1 && moeFitFor(moeQuants[fam.Quants[0]], env, moeHaveGB(family, fam.Quants[0])).OK {
+		best = fam.Quants[0]
+	}
 	if moeHas(fam.Quants, "IQ3_S") {
 		q := moeQuants["IQ3_S"]
 		if f := moeFitFor(q, env, moeHaveGB(family, "IQ3_S")); f.OK && !f.Mmap {
@@ -565,8 +573,13 @@ type moeInstallReq struct {
 // moePresetName : nom du fichier preset (et donc de son id) pour un choix donné.
 func moePresetName(family, quant string) string {
 	label := "Classique"
-	if family == "swift" {
+	switch family {
+	case "swift":
 		label = "Swift 1.5"
+	case "coder":
+		label = "Coder"
+	case "unsloth":
+		label = "Unsloth"
 	}
 	return "FLASH NEXT " + strings.ToUpper(label) + " " + quant
 }
@@ -711,7 +724,7 @@ func moeRunInstall(req moeInstallReq) {
 		}
 		return
 	}
-	cfgPath, err := moeFindConfig(q.ID)
+	cfgPath, err := moeFindConfig(moeTag(req.Family, q.ID))
 	if err != nil {
 		lcFail(err)
 		return
@@ -801,16 +814,17 @@ func moeFamilyLabel(id string) string {
 }
 
 // moeFindConfig : la config de lancement que l'installeur a écrite
-// (<nom>-<tag>.json à la racine des sources), celle du quant demandé.
-func moeFindConfig(quant string) (string, error) {
+// (strata-<tag>.json à la racine des sources), celle du choix demandé. Le nom
+// est comparé en entier : « iq3_xxs » ne doit pas retomber sur « swift-iq3_xxs ».
+func moeFindConfig(tag string) (string, error) {
 	matches, _ := filepath.Glob(filepath.Join(moeSrcDir(), "strata-*.json"))
-	q := strings.ToLower(quant)
+	want := "strata-" + strings.ToLower(tag) + ".json"
 	for _, m := range matches {
-		if strings.Contains(strings.ToLower(filepath.Base(m)), q) && !strings.HasSuffix(m, "-ajean.json") {
+		if strings.ToLower(filepath.Base(m)) == want {
 			return m, nil
 		}
 	}
-	return "", fmt.Errorf("l'installeur n'a pas laissé de configuration pour %s dans %s", quant, moeSrcDir())
+	return "", fmt.Errorf("l'installeur n'a pas laissé de configuration pour %s dans %s", tag, moeSrcDir())
 }
 
 func copyFile(src, dst string) error {
