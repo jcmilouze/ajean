@@ -185,6 +185,7 @@ func newWebMux() *http.ServeMux {
 	api("/api/engine/cmdline", handleEngineCmdline) // commande llama-server du dernier lancement (#108)
 	api("/api/model/layers", handleModelLayers)     // nombre de couches du modèle (#43)
 	api("/api/reasoning", handleReasoning)          // change l'effort de réflexion à chaud (raccourci composeur)
+	api("/api/prompt/improve", handlePromptImprove) // réécrit le brouillon du composeur avec le modèle chargé
 	api("/api/catalog", handleCatalog)
 	api("/api/paths", handlePaths)
 	api("/api/update", handleUpdateCheck)
