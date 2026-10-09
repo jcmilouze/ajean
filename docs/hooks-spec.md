@@ -26,8 +26,8 @@ Les appels refusés par `isJeanReflecting` ou `badArgs` n'atteignent pas le hook
 - **Canal borné** (256 par défaut). Quand il est plein, on abandonne l'événement le plus récent, on incrémente un compteur `dropped` et on écrit une ligne dans les logs. L'agent n'est jamais bloqué par la file.
 - **Instantané** : l'événement copie `tool`, `args`, `label` et `result` (des chaînes) avant l'envoi. Rien n'est partagé avec la boucle d'outils.
 - **Contexte propre** : le worker n'utilise pas le contexte du tour, qui est annulé par le bouton stop ou en fin de tour. Chaque hook garde son `timeoutSec`.
-- **Arrêt** : à la fermeture, vidage de la file avec une limite de 2 s, puis abandon.
-- **Pas de durabilité** : un crash du processus perd les événements en attente. Si un journal fiable est nécessaire, le hook écrit lui-même sur disque. Un journal intégré (JSONL) serait un autre palier.
+- **Arrêt** : AJEAN n'a pas de chemin d'arrêt propre (`mcpCloseAll` n'est appelé nulle part). Il n'y a donc pas de vidage à la fermeture : `flushPostHooks(timeout)` existe pour les tests et pour un futur arrêt propre.
+- **Pas de durabilité** : un arrêt ou un crash du processus perd les événements en attente. Si un journal fiable est nécessaire, le hook écrit lui-même sur disque. Un journal intégré (JSONL) serait un autre palier.
 - **Option** `"async": false` sur un hook `PostToolUse` pour le forcer en synchrone (utile aux tests).
 - **Observabilité** : `ajean hooks status` affiche la profondeur de la file, les événements traités, abandonnés et en erreur.
 
@@ -87,8 +87,9 @@ Un hook s'exécute avec les droits de l'utilisateur, donc :
 ## Fichiers
 | Fichier | Changement |
 |---|---|
-| `hooks.go` (nouveau, ~150 l.) | `loadHooks`, `runPreHooks(ctx, name, args, label) string` (vide = autorisé), `runPostHooks(...)` |
-| `hooks_queue.go` (nouveau, ~60 l.) | file bornée, worker, vidage à l'arrêt, compteurs |
+| `hooks_config.go` (nouveau) | `hooks.json` : types, chargement avec cache `mtime`, `matchingHooks` |
+| `hooks.go` (nouveau) | `runPreHooks(ctx, ev) string` (vide = autorisé), `runHook`, protocole de décision |
+| `hooks_queue.go` (nouveau) | file bornée, worker, `drain`, `runPostHooks` |
 | `hooks_test.go` (nouveau) | voir plan de test |
 | `llm_client.go` | deux appels, ~10 lignes. Le fichier fait déjà 1897 lignes et reste le point de conflit avec l'amont. |
 | `chat_tools.go` | protection du dossier `hooks/` |
@@ -108,7 +109,8 @@ Un hook s'exécute avec les droits de l'utilisateur, donc :
 - Comparer `ajean-fork.exe version` avec `Version` dans `run.go` avant tout test (voir la note sur le binaire en retard).
 
 ## Questions ouvertes
-- Le terminal (`cli_chat.go`, `caps.Terminal`) passe-t-il par la même boucle ? À confirmer avant de promettre que les hooks s'y appliquent.
+- Le terminal (`cli_chat.go`), les tâches planifiées (`tasks_run.go`) et les révisions de Jean (`jean_reflect.go`) appellent tous `runChat` : les hooks s'y appliquent. Les révisions de Jean n'atteignent pas les hooks pour les outils refusés par `isJeanReflecting`.
+- `ajean hooks list|status|test` : non implémenté (tranche 3).
 - `UserPromptSubmit` : point d'entrée non localisé. Reporté tant qu'il n'est pas identifié.
 - Hooks par projet (`projects/`) : utile, mais pose la question de la confiance dans un dossier de projet. Reporté.
 
