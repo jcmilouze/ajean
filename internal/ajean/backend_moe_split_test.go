@@ -74,3 +74,32 @@ func TestMoeApplySettingsSplit(t *testing.T) {
 		t.Errorf("répartition inconnue acceptée")
 	}
 }
+
+// Point de coupure fixe (#2418, #2463 : l'auto de la 0.1.44.1 déséquilibre une
+// 4090 + 3090) et réglages libres du moteur posés par le preset.
+func TestMoeBuildConfigLayerSplitK(t *testing.T) {
+	base := map[string]any{"args": []any{"--pack", "/p", "--pipeline-windows", "1"}}
+	cfg := map[string]string{"MOE_MAIN_GPU": "1", "MOE_HELPER_GPU": "0", "MOE_SPLIT": "layers", "MOE_LAYER_SPLIT": "27",
+		"MOE_ENGINE_ENV": "STRATA_SPLIT_LINK_ABS=1  STRATA_PREFILL_HELP=1", "MOE_ENGINE_ARGS": "--trim-stage-weights --pipeline-windows 2"}
+	out, err := moeBuildConfig(base, cfg, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out["layer_split"] != "27" || out["gpu_order"] != "as_given" {
+		t.Errorf("layer_split=%v gpu_order=%v, attendu 27 / as_given", out["layer_split"], out["gpu_order"])
+	}
+	a := moeArgs(t, out)
+	if !hasArg(a, "--trim-stage-weights") || argAfter(a, "--pipeline-windows") != "2" {
+		t.Errorf("MOE_ENGINE_ARGS mal appliqué : %v", a)
+	}
+	env := out["env"].(map[string]any)
+	if env["STRATA_SPLIT_LINK_ABS"] != "1" || env["STRATA_PREFILL_HELP"] != "1" {
+		t.Errorf("MOE_ENGINE_ENV mal appliqué : %v", env)
+	}
+
+	// K sans partage des couches : ignoré (le mode d'aide n'a pas de couches à couper).
+	delete(cfg, "MOE_SPLIT")
+	if out, _ = moeBuildConfig(base, cfg, ""); out["layer_split"] != nil {
+		t.Errorf("layer_split posé hors partage des couches : %v", out["layer_split"])
+	}
+}

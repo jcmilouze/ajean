@@ -952,6 +952,13 @@ func moeBuildConfig(base map[string]any, cfg map[string]string, apiKey string) (
 		second, _ := strconv.Atoi(strings.TrimSpace(cfg["MOE_HELPER_GPU"]))
 		out["gpu"] = []any{main, second}
 		hasHelper = false
+		// point de coupure fixe : l'auto de la 0.1.44.1 donne 45 couches sur 48 à
+		// une 4090 face à une 3090 (#2463, #2418) ; « as_given » garde la principale
+		// en premier, le serveur réordonnerait sinon les cartes
+		if k := strings.TrimSpace(cfg["MOE_LAYER_SPLIT"]); k != "" {
+			out["layer_split"] = k
+			out["gpu_order"] = "as_given"
+		}
 	}
 	// Deuxième carte en aide : elle garde et CALCULE sa part des experts (le
 	// chemin « helper » du moteur), la carte principale reste CUDA0. Les cartes
@@ -1041,6 +1048,21 @@ func moeBuildConfig(base map[string]any, cfg map[string]string, apiKey string) (
 	}
 	if kr := strings.TrimSpace(cfg["MOE_KV_RESIDENT"]); kr != "" {
 		args = setArg(args, "--kv-resident", kr)
+	}
+	// réglages libres du moteur (A/B sans toucher au JSON) : ils passent en dernier
+	for _, kv := range strings.Fields(cfg["MOE_ENGINE_ENV"]) {
+		if k, v, ok := strings.Cut(kv, "="); ok {
+			env[k] = v
+		}
+	}
+	extra := strings.Fields(cfg["MOE_ENGINE_ARGS"])
+	for i := 0; i < len(extra); i++ {
+		if i+1 < len(extra) && !strings.HasPrefix(extra[i+1], "--") {
+			args = setArg(args, extra[i], extra[i+1])
+			i++
+		} else if !hasArg(args, extra[i]) {
+			args = append(args, extra[i])
+		}
 	}
 	// lecture des images coupée dans les réglages : ni encodeur ni --vision
 	if cfg["MOE_VISION"] == "0" {
