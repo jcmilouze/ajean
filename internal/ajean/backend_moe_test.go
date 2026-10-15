@@ -486,6 +486,12 @@ func TestMoeBuildConfigHelperPrompt(t *testing.T) {
 	if argAfter(moeArgs(t, out), "--short-read") != "48" || out["env"].(map[string]any)["STRATA_PREFILL_HELPER_SOURCE"] != "1" {
 		t.Errorf("carte d'aide : lecture courte et source d'aide attendues : %v %v", moeArgs(t, out), out["env"])
 	}
+	// valeur posée dans la config du moteur : respectée (lien PCIe lent de la carte d'aide)
+	withEnv := map[string]any{"args": []any{"--pack", "/p"}, "env": map[string]any{"STRATA_PREFILL_HELPER_SOURCE": "0"}}
+	out, _ = moeBuildConfig(withEnv, map[string]string{"MOE_HELPER_GPU": "0"}, "")
+	if out["env"].(map[string]any)["STRATA_PREFILL_HELPER_SOURCE"] != "0" {
+		t.Errorf("source d'aide de la config écrasée : %v", out["env"])
+	}
 	// sans carte d'aide : réglages d'avant
 	out, _ = moeBuildConfig(base, map[string]string{}, "")
 	if argAfter(moeArgs(t, out), "--short-read") != "150" || out["env"].(map[string]any)["STRATA_PREFILL_HELPER_SOURCE"] != nil {

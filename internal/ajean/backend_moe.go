@@ -1018,7 +1018,10 @@ func moeBuildConfig(base map[string]any, cfg map[string]string, apiKey string) (
 		// lien PCIe (le chemin passe par la source « helper ») ; le chemin par blocs
 		// coûte alors moins cher, les ajouts courts n'en sont exclus que sous 48
 		// jetons. Mesuré : 100 nouveaux jetons 1,19 -> 0,85 s, 200 : 1,96 -> 1,12 s.
-		env["STRATA_PREFILL_HELPER_SOURCE"] = "1"
+		// une valeur posée dans la config du moteur gagne (carte d'aide sur un lien lent)
+		if _, set := env["STRATA_PREFILL_HELPER_SOURCE"]; !set {
+			env["STRATA_PREFILL_HELPER_SOURCE"] = "1"
+		}
 		args = setArg(args, "--short-read", "48")
 	}
 	out["env"] = env
