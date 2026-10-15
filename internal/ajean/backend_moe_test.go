@@ -494,6 +494,9 @@ func TestMoeBuildConfigHelperPrompt(t *testing.T) {
 }
 
 func TestMoeBuildConfigDropReserveAndCtx(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("moteur Linux (engine-cuda12, remote-drop)")
+	}
 	home := t.TempDir()
 	t.Setenv("AJEAN_HOME", home)
 	pack := filepath.Join(home, "pack")
@@ -519,6 +522,9 @@ func TestMoeBuildConfigDropReserveAndCtx(t *testing.T) {
 }
 
 func TestMoeMigrate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("moteur Linux (engine-cuda12, remote-drop)")
+	}
 	home := t.TempDir()
 	t.Setenv("AJEAN_HOME", home)
 	oldDir := filepath.Join(moeHome(), "ajean-moe-1.0")

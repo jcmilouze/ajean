@@ -1272,6 +1272,10 @@ func serveMoe(cfg map[string]string) error {
 // config vivante pointent sur la nouvelle. En cas d'échec rien n'est réécrit :
 // l'ancienne version continue de tourner.
 func moeMigrate(cfg map[string]string) error {
+	// le moteur Windows vient de la release Strata, pas du paquet 1.x : ses sources, son .venv et son dossier engine/ ne se migrent pas
+	if runtime.GOOS == "windows" {
+		return nil
+	}
 	old := strings.TrimSpace(cfg["MOE_CONFIG"])
 	oldDir := filepath.Dir(old)
 	newDir := moeSrcDir()
