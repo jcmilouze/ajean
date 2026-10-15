@@ -360,7 +360,7 @@ func TestMoeDetailsFor(t *testing.T) {
 	}
 	if d.KV != "fp16" || d.KVResident != "32768" || d.Spec != "3" || d.Ctx != "131072" || !d.Mmap ||
 		d.MainGPU != "RTX 5060 Ti (16 Go)" || d.HelperGPU != "RTX 3070 (8 Go)" || d.VisionGPU != "RTX 3070 (8 Go)" ||
-		d.ShortRead != "150" || d.CacheRoot != "256" || d.Prefill != "16384" {
+		d.ShortRead != "48" || d.CacheRoot != "256" || d.Prefill != "16384" {
 		t.Errorf("%+v", *d)
 	}
 }
@@ -455,5 +455,107 @@ func TestMoeApplySettings(t *testing.T) {
 		if _, err := moeApplySettings(in, bad); err == nil {
 			t.Errorf("accepté : %+v", bad)
 		}
+	}
+}
+
+func TestMoeSetEffort(t *testing.T) {
+	base := "# NAME=x\nENGINE=moe\nCTX=131072\n"
+	got := moeSetEffort(base, "low")
+	if parseEnv(got)["REASONING_EFFORT"] != "low" || parseEnv(got)["CTX"] != "131072" {
+		t.Fatalf("effort non inscrit : %q", got)
+	}
+	got = moeSetEffort(got, "medium")
+	if strings.Count(got, "REASONING_EFFORT=") != 1 || parseEnv(got)["REASONING_EFFORT"] != "medium" {
+		t.Fatalf("effort en double ou non remplacé : %q", got)
+	}
+	if got = moeSetEffort(got, ""); got != base {
+		t.Fatalf("défaut : la clé doit disparaître, reçu %q", got)
+	}
+}
+
+func TestMoeNeutralVersion(t *testing.T) {
+	got := moeNeutral("serve: engine 0.1.44.1 ready")
+	if !strings.Contains(got, "AJEAN MoE "+moeVersion) || strings.Contains(got, "0.1.44") {
+		t.Errorf("%q", got)
+	}
+}
+
+func TestMoeBuildConfigHelperPrompt(t *testing.T) {
+	base := map[string]any{"args": []any{"--pack", "/p"}}
+	out, _ := moeBuildConfig(base, map[string]string{"MOE_HELPER_GPU": "0"}, "")
+	if argAfter(moeArgs(t, out), "--short-read") != "48" || out["env"].(map[string]any)["STRATA_PREFILL_HELPER_SOURCE"] != "1" {
+		t.Errorf("carte d'aide : lecture courte et source d'aide attendues : %v %v", moeArgs(t, out), out["env"])
+	}
+	// sans carte d'aide : réglages d'avant
+	out, _ = moeBuildConfig(base, map[string]string{}, "")
+	if argAfter(moeArgs(t, out), "--short-read") != "150" || out["env"].(map[string]any)["STRATA_PREFILL_HELPER_SOURCE"] != nil {
+		t.Errorf("une carte : %v %v", moeArgs(t, out), out["env"])
+	}
+}
+
+func TestMoeBuildConfigDropReserveAndCtx(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("AJEAN_HOME", home)
+	pack := filepath.Join(home, "pack")
+	_ = os.MkdirAll(pack, 0o755)
+	_ = os.WriteFile(filepath.Join(pack, "experts.bin"), []byte("x"), 0o644)
+	_ = os.MkdirAll(filepath.Join(moeSrcDir(), "engine-cuda12"), 0o755)
+	_ = os.WriteFile(moeEngineMarker(), []byte(moeEngineAsset+"\n"), 0o644)
+	base := map[string]any{"args": []any{"--pack", pack}, "env": map[string]any{}}
+	cfg := map[string]string{"MOE_HELPER_GPU": "0", "MOE_DROP": "1", "CTX": "167936"}
+	out, _ := moeBuildConfig(base, cfg, "")
+	if out["env"].(map[string]any)["STRATA_REMOTE_DROP_RESERVE_MIB"] != "640" {
+		t.Errorf("réserve de la carte d'aide : %v", out["env"])
+	}
+	if got := argAfter(moeArgs(t, out), "--max-context"); got != "131072" {
+		t.Errorf("contexte hors RAM non plafonné : %s", got)
+	}
+	// hors du mode hors RAM : le contexte demandé
+	cfg["MOE_DROP"], cfg["MOE_MMAP"] = "0", "1"
+	out, _ = moeBuildConfig(base, cfg, "")
+	if got := argAfter(moeArgs(t, out), "--max-context"); got != "167936" {
+		t.Errorf("contexte plafonné sans mode hors RAM : %s", got)
+	}
+}
+
+func TestMoeMigrate(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("AJEAN_HOME", home)
+	oldDir := filepath.Join(moeHome(), "ajean-moe-1.0")
+	newDir := moeSrcDir()
+	for _, d := range []string{filepath.Join(oldDir, ".venv", "bin"), filepath.Join(newDir, "engine-cuda12"), presetsDir()} {
+		_ = os.MkdirAll(d, 0o755)
+	}
+	_ = os.WriteFile(moeVenvPython(oldDir), []byte("#!/bin/sh\n"), 0o755)
+	for _, d := range []string{oldDir, newDir} {
+		_ = os.WriteFile(filepath.Join(d, "requirements.txt"), []byte("numpy\n"), 0o644)
+	}
+	_ = os.WriteFile(filepath.Join(newDir, "setup.py"), []byte(""), 0o644)
+	_ = os.WriteFile(moeEngineMarker(), []byte(moeEngineAsset+"\n"), 0o644)
+	old := filepath.Join(oldDir, "eng-swift-iq3_xxs.json")
+	_ = os.WriteFile(old, []byte(`{"exe": "`+filepath.Join(oldDir, "engine-cuda12", "e")+`", "args": []}`), 0o644)
+	preset := filepath.Join(presetsDir(), "P.env")
+	_ = os.WriteFile(preset, []byte("ENGINE=moe\nMOE_CONFIG="+old+"\nCTX=1\n"), 0o644)
+	cfg := map[string]string{"ENGINE": "moe", "MOE_CONFIG": old}
+	if err := moeMigrate(cfg); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(newDir, "eng-swift-iq3_xxs.json")
+	if cfg["MOE_CONFIG"] != want || ReadConfig()["MOE_CONFIG"] != want {
+		t.Fatalf("config vivante : %q", cfg["MOE_CONFIG"])
+	}
+	b, _ := os.ReadFile(want)
+	if strings.Contains(string(b), oldDir) || !strings.Contains(string(b), filepath.Join(newDir, "engine-cuda12")) {
+		t.Errorf("chemins non réécrits : %s", b)
+	}
+	if p, _ := os.ReadFile(preset); !strings.Contains(string(p), "MOE_CONFIG="+want+"\n") {
+		t.Errorf("preset non réécrit : %s", p)
+	}
+	if !isFile(moeVenvPython(newDir)) {
+		t.Error("environnement Python non repris")
+	}
+	// déjà à jour : rien à faire
+	if err := moeMigrate(cfg); err != nil || cfg["MOE_CONFIG"] != want {
+		t.Errorf("seconde passe : %v %q", err, cfg["MOE_CONFIG"])
 	}
 }

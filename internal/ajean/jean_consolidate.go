@@ -62,9 +62,38 @@ func jeanConsolidateArmLocked(d time.Duration) {
 	jeanConsolidateTimer.t = time.AfterFunc(d, runJeanConsolidate)
 }
 
+// Le sommeil ne démarre que la nuit, entre 3 h et 5 h à l'heure de l'utilisateur :
+// en journée il occupait les cartes et faisait croire à une utilisation inconnue.
+const (
+	jeanSleepFromHour = 3
+	jeanSleepToHour   = 5
+)
+
+// jeanUntilSleepWindow : 0 si on est dans la plage du sommeil, sinon le délai
+// jusqu'au prochain 3 h.
+func jeanUntilSleepWindow(now time.Time) time.Duration {
+	now = now.In(loc(defaultTaskTZ()))
+	if h := now.Hour(); h >= jeanSleepFromHour && h < jeanSleepToHour {
+		return 0
+	}
+	next := time.Date(now.Year(), now.Month(), now.Day(), jeanSleepFromHour, 0, 0, 0, now.Location())
+	if !next.After(now) {
+		next = next.AddDate(0, 0, 1)
+	}
+	return next.Sub(now)
+}
+
 func runJeanConsolidate() {
 	if !jeanMemDirty.Load() && !jeanMemChangedSinceConsolidation() {
 		return
+	}
+	if os.Getenv("AJEAN_JEAN_CONSOLIDATE_DELAY") == "" {
+		if d := jeanUntilSleepWindow(time.Now()); d > 0 {
+			jeanReflect.mu.Lock()
+			jeanConsolidateArmLocked(d)
+			jeanReflect.mu.Unlock()
+			return
+		}
 	}
 	// Une révision encore due passe d'abord : elle voit le fil, pas nous.
 	jeanReflect.mu.Lock()

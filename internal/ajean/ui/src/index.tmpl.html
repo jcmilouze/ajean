@@ -1084,6 +1084,14 @@
             <input id="s-cloud-model" class="pe-inp" placeholder="https://huggingface.co/…/resolve/main/model.gguf" oninput="cfgWriteKey('CLOUD_MODEL', this.value)">
           </div>
           <div class="pe-row stack">
+            <span class="pe-row-l"><span data-i18n="preset.cloud_draft_label">Modèle draft</span> <span class="pe-sub" data-i18n="preset.cloud_draft_sub">GGUF pour le décodage spéculatif (facultatif)</span></span>
+            <input id="s-cloud-draft" class="pe-inp" placeholder="https://huggingface.co/…/resolve/main/draft.gguf" oninput="cfgWriteKey('CLOUD_DRAFT', this.value)">
+          </div>
+          <div class="pe-row">
+            <span class="pe-row-l"><span data-i18n="preset.cloud_predict_label">Budget de sortie</span><span class="pe-sub" data-i18n="preset.cloud_predict_sub">tokens par défaut, modifiable par requête</span></span>
+            <span class="pe-row-c"><input id="s-cloud-predict" class="pe-val" type="number" min="1" step="256" placeholder="4800" oninput="cfgWriteKey('CLOUD_N_PREDICT', this.value)"><span class="pe-unit">tok</span></span>
+          </div>
+          <div class="pe-row stack">
             <span class="pe-row-l"><span data-i18n="preset.cloud_vision_label">Vision</span> <span class="pe-sub" data-i18n="preset.cloud_vision_sub">lien direct vers le mmproj .gguf (facultatif)</span></span>
             <input id="s-cloud-mmproj" class="pe-inp" placeholder="https://huggingface.co/…/mmproj-….gguf" oninput="cfgWriteKey('CLOUD_MMPROJ', this.value)">
           </div>
@@ -1150,6 +1158,7 @@
               </div>
               <div id="m-hf-bar" class="pe-bar" style="display:none"><i></i></div>
               <div id="m-hf-progress" class="pe-note" style="display:none"></div>
+              <button id="m-hf-pause" class="pe-link" onclick="togglePauseDownload()" style="display:none" data-i18n="preset.download_pause">Mettre en pause</button>
               <button id="m-hf-cancel" class="pe-link" onclick="cancelDownload()" style="display:none" data-i18n="preset.download_cancel">Annuler le téléchargement</button>
             </div>
             <div class="pe-row">

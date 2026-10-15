@@ -42,10 +42,12 @@ import (
 
 // Version du moteur AJEAN MoE et paquets correspondants. Le moteur est compilé
 // par nous (CUDA 12.8, mode portable AVX2, sm_75/80/86/89/120 : RTX 20 à 50),
-// avec les experts de la carte d'appoint gardés hors RAM (voir moeDropFits).
-// Un moteur installé d'un autre paquet est remplacé au lancement (moeEnsureEngine).
+// avec les experts de la carte d'appoint gardés hors RAM (voir moeDropFits) et,
+// depuis la 1.1, calculés par elle à la lecture des prompts.
+// Un moteur installé d'un autre paquet est remplacé au lancement (moeEnsureEngine),
+// une installation d'une version précédente est reprise (moeMigrate).
 const (
-	moeVersion     = "1.0"
+	moeVersion     = "1.1"
 	moeReleaseBase = "https://github.com/nathaninline/ajean/releases/download/moe-v" + moeVersion + "/"
 	moeSrcAsset    = "ajean-moe-src-" + moeVersion + ".tar.gz"
 	moeEngineAsset = "ajean-moe-engine-" + moeVersion + "-linux-x64-cuda12.zip"
@@ -68,8 +70,8 @@ const (
 
 // moeAssetSHA : empreintes des fichiers de la release, vérifiées avant usage.
 var moeAssetSHA = map[string]string{
-	moeSrcAsset:       "5747f69426973d957e4f9894a8e3333c6ef0d6ac8565e26ddb8d36f52211cb3b",
-	moeEngineAsset:    "b5851bc138ab32ca3ffefc16bf91c8f557e4d503503473a22f2b6c9e9b8fd34c",
+	moeSrcAsset:       "5a72a90f2182ff0ccab2bdbd7cff15598a21ad94501aa19de2b1b18e2dbc8115",
+	moeEngineAsset:    "8c717206ee90120f967445169dc39bb11beffdad3d592c75ae08f75bec72f0d3",
 	moeWinEngineAsset: "3dd7715f4844c0f9d2f28eb5067af0198f386df060c93523cd17e1d65b757f13",
 	moeWinSrcAsset:    "ab48b29e6c9177b339bddc3479621d193c4116105901d419f7df7f4edea89be2",
 }
@@ -153,8 +155,14 @@ const moeLowRAMHeadroomGB = 10
 
 // moeDropHeadroomGB : RAM à laisser à côté des experts verrouillés quand la
 // carte d'aide garde les siens hors RAM (mesuré sur le serveur de test :
-// 46 Go de RAM, 34,7 Gio d'experts verrouillés, ~2,3 Go encore libres).
-const moeDropHeadroomGB = 7
+// 46 Go de RAM, 34,7 Gio d'experts verrouillés, ~2,3 Go encore libres ; le
+// moteur 1.1 prend ~1 Go de plus que la 1.0).
+const moeDropHeadroomGB = 8
+
+// moeDropMaxCtx : contexte maximal en mode hors RAM. Le cache KV au-delà de la
+// part en VRAM est verrouillé en RAM : à 167 936 jetons, le serveur de test
+// tombait à 1,3 Go libres dès la première requête (moteur 1.1).
+const moeDropMaxCtx = 131072
 
 // moeHelperExpertsGB : ce que la carte d'aide garde d'experts (sa VRAM moins
 // le contexte CUDA, l'encodeur d'images et la marge : 5,3 Gio sur une 3070 8 Go).
@@ -790,14 +798,15 @@ func moeEnsureVenv(srcDir, extraEnv string) (string, error) {
 	return py, nil
 }
 
-var reUpstreamName = regexp.MustCompile(`(?i)strata`)
+var (
+	reUpstreamName    = regexp.MustCompile(`(?i)strata`)
+	reUpstreamVersion = regexp.MustCompile(`engine 0\.1\.[0-9.]*[0-9]`)
+)
 
 // moeNeutral retire le nom du moteur amont d'une ligne de journal.
 func moeNeutral(line string) string {
-	// le binaire annonce sa version d'origine (« engine 0.1.39 » ou « engine 0.1.41 ») : c'est la 1.0 d'AJEAN MoE
-	for _, v := range []string{"0.1.39", "0.1.41"} {
-		line = strings.ReplaceAll(line, "engine "+v, "AJEAN MoE "+moeVersion)
-	}
+	// le binaire annonce sa version d'origine (« engine 0.1.44.1 ») : c'est celle d'AJEAN MoE
+	line = reUpstreamVersion.ReplaceAllString(line, "AJEAN MoE "+moeVersion)
 	return reUpstreamName.ReplaceAllString(line, "moteur")
 }
 
@@ -990,6 +999,9 @@ func moeBuildConfig(base map[string]any, cfg map[string]string, apiKey string) (
 		// de copie : 8 fils et 32 tampons (le moteur en prendrait 32 et 128)
 		env["STRATA_STAGER_THREADS"] = "8"
 		env["STRATA_STAGER_RING"] = "32"
+		// sa VRAM libre réservée : 640 Mio (défaut 1024) = ~230 experts de plus hors
+		// RAM, l'encodeur d'images y tourne encore ; le moteur refuse moins de 512
+		env["STRATA_REMOTE_DROP_RESERVE_MIB"] = "640"
 	} else if cfg["MOE_MMAP"] == "1" || cfg["MOE_DROP"] == "1" || hasArg(args, "--mmap-experts") || hasArg(args, "--resident-experts") {
 		// (MOE_DROP sans experts.bin : ce lancement l'écrit, en mmap)
 		args = dropFlag(dropFlag(args, "--mmap-experts"), "--resident-experts")
@@ -1000,8 +1012,21 @@ func moeBuildConfig(base map[string]any, cfg map[string]string, apiKey string) (
 		k, v, _ := strings.Cut(kv, "=")
 		env[k] = v
 	}
+	if hasHelper {
+		// Lecture d'un prompt (moteur 1.1) : les experts que la carte d'aide garde
+		// sont calculés par elle au lieu d'être recopiés vers la principale par son
+		// lien PCIe (le chemin passe par la source « helper ») ; le chemin par blocs
+		// coûte alors moins cher, les ajouts courts n'en sont exclus que sous 48
+		// jetons. Mesuré : 100 nouveaux jetons 1,19 -> 0,85 s, 200 : 1,96 -> 1,12 s.
+		env["STRATA_PREFILL_HELPER_SOURCE"] = "1"
+		args = setArg(args, "--short-read", "48")
+	}
 	out["env"] = env
 	if ctx := strings.TrimSpace(cfg["CTX"]); ctx != "" {
+		// hors RAM, le cache KV verrouillé au-delà de moeDropMaxCtx ne tient plus
+		if n, err := strconv.Atoi(ctx); err == nil && n > moeDropMaxCtx && env["STRATA_REMOTE_DROP"] == "1" {
+			ctx = strconv.Itoa(moeDropMaxCtx)
+		}
 		args = setArg(args, "--max-context", ctx)
 	}
 	// réglages imposés par le preset (sinon : ceux de l'installeur)
@@ -1174,6 +1199,9 @@ func moePreflight(cfg map[string]string) (string, map[string]any, error) {
 // côté de celle de l'installeur puis remplace le process par le serveur du moteur
 // (comme llama-server : systemd supervise directement le moteur).
 func serveMoe(cfg map[string]string) error {
+	if err := moeMigrate(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "[ajean serve] passage à AJEAN MoE %s impossible (%v) : la version installée reste utilisée\n", moeVersion, err)
+	}
 	path, base, err := moePreflight(cfg)
 	if err != nil {
 		return err
@@ -1232,6 +1260,80 @@ func serveMoe(cfg map[string]string) error {
 	fmt.Fprintf(os.Stderr, "[ajean serve] AJEAN MoE %s  config=%s  port=%s  gpu=%s\n", moeVersion, filepath.Base(out), port, os.Getenv("CUDA_VISIBLE_DEVICES"))
 	_ = putBytes(bkState, engineCmdlineKey, []byte(engineCmdline(args)))
 	return execServer(launcher, args)
+}
+
+// moeMigrate : un preset installé par une version précédente du moteur
+// (MOE_CONFIG dans moeHome()/ajean-moe-<ancienne>) passe à la version courante
+// au lancement, sans réinstaller : les modèles et packs (data/) servent tels
+// quels. Les sources de la version courante sont posées, l'environnement Python
+// de l'ancienne est repris par un lien quand les dépendances n'ont pas changé,
+// le moteur compilé est installé par moeEnsureEngine, la config de l'installeur
+// est recopiée avec ses chemins réécrits, et les presets qui la citaient comme la
+// config vivante pointent sur la nouvelle. En cas d'échec rien n'est réécrit :
+// l'ancienne version continue de tourner.
+func moeMigrate(cfg map[string]string) error {
+	old := strings.TrimSpace(cfg["MOE_CONFIG"])
+	oldDir := filepath.Dir(old)
+	newDir := moeSrcDir()
+	if old == "" || oldDir == newDir || filepath.Dir(oldDir) != moeHome() || !strings.HasPrefix(filepath.Base(oldDir), "ajean-moe-") {
+		return nil
+	}
+	newPath := filepath.Join(newDir, filepath.Base(old))
+	if !isFile(newPath) {
+		raw, err := os.ReadFile(old)
+		if err != nil {
+			return err
+		}
+		if !isFile(filepath.Join(newDir, "setup.py")) {
+			src, err := moeFetch(moeSrcAsset)
+			if err != nil {
+				return err
+			}
+			if err := extractArchive(src, moeHome()); err != nil {
+				return fmt.Errorf("décompression : %w", err)
+			}
+		}
+		venv := filepath.Join(newDir, ".venv")
+		if _, err := os.Lstat(venv); err != nil {
+			a, _ := os.ReadFile(filepath.Join(oldDir, "requirements.txt"))
+			b, _ := os.ReadFile(filepath.Join(newDir, "requirements.txt"))
+			if len(a) == 0 || string(a) != string(b) || !isFile(moeVenvPython(oldDir)) {
+				return fmt.Errorf("dépendances Python changées : réinstaller le modèle depuis la section Moteur")
+			}
+			if err := os.Symlink(filepath.Join(oldDir, ".venv"), venv); err != nil {
+				return err
+			}
+		}
+		if err := os.MkdirAll(filepath.Join(newDir, "engine-cuda12"), 0o755); err != nil {
+			return err
+		}
+		if err := moeEnsureEngine(); err != nil {
+			return err
+		}
+		body := strings.ReplaceAll(string(raw), oldDir+string(os.PathSeparator), newDir+string(os.PathSeparator))
+		if err := os.WriteFile(newPath+".new", []byte(body), 0o644); err != nil {
+			return err
+		}
+		if err := os.Rename(newPath+".new", newPath); err != nil {
+			return err
+		}
+	}
+	// les presets qui citent l'ancienne config, puis la config vivante
+	if list, _ := filepath.Glob(filepath.Join(presetsDir(), "*.env")); len(list) > 0 {
+		for _, p := range list {
+			b, err := os.ReadFile(p)
+			if err != nil || !strings.Contains(string(b), "MOE_CONFIG="+old+"\n") {
+				continue
+			}
+			_ = os.WriteFile(p, []byte(strings.ReplaceAll(string(b), "MOE_CONFIG="+old+"\n", "MOE_CONFIG="+newPath+"\n")), 0o644)
+		}
+	}
+	if err := SetConfigKey("MOE_CONFIG", newPath); err != nil {
+		return err
+	}
+	cfg["MOE_CONFIG"] = newPath
+	fmt.Fprintf(os.Stderr, "[ajean serve] AJEAN MoE %s : installation reprise depuis %s\n", moeVersion, filepath.Base(oldDir))
+	return nil
 }
 
 // moeConfigTag : le modèle d'une config de l'installeur (strata-swift-iq3_xxs.json → swift-iq3_xxs).
@@ -1388,6 +1490,41 @@ func moeApplySettings(content string, r moeSettingsReq) (string, error) {
 		}
 	}
 	return strings.Join(lines, "\n") + "\n", nil
+}
+
+// moeSetEffort réécrit REASONING_EFFORT dans le contenu d'un preset (pure,
+// testable) ; vide = la clé disparaît (défaut du modèle).
+func moeSetEffort(content, eff string) string {
+	var lines []string
+	for _, l := range strings.Split(strings.TrimRight(content, "\n"), "\n") {
+		if k, _, _ := strings.Cut(strings.TrimSpace(l), "="); k == "REASONING_EFFORT" {
+			continue
+		}
+		lines = append(lines, l)
+	}
+	if eff != "" {
+		lines = append(lines, "REASONING_EFFORT="+eff)
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
+
+// moePersistEffort inscrit le niveau de réflexion dans le preset MoE actif : le
+// raccourci du composeur n'écrit que la config vivante, et ce preset n'a pas
+// d'éditeur où le fixer. Sans cela le niveau repartait au défaut à chaque bascule.
+func moePersistEffort(eff string) {
+	if !isMoeConfig(ReadConfig()) {
+		return
+	}
+	id := getStr(bkState, "active_preset")
+	if id == "" || strings.ContainsAny(id, "/\\") {
+		return
+	}
+	path := filepath.Join(presetsDir(), id+".env")
+	b, err := os.ReadFile(path)
+	if err != nil || !isMoeConfig(parseEnv(string(b))) {
+		return
+	}
+	_ = os.WriteFile(path, []byte(moeSetEffort(string(b), eff)), 0o644)
 }
 
 // handleMoeSettings (POST) : enregistre les réglages d'un modèle installé ; s'il

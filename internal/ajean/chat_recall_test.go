@@ -2,6 +2,7 @@ package ajean
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -75,6 +76,37 @@ func TestRecallIDsMonotonic(t *testing.T) {
 	s2, _ := recallIDToSeq(id2)
 	if s2 <= s1 {
 		t.Fatalf("séquence non croissante: %d puis %d", s1, s2)
+	}
+}
+
+func TestArchiveRecallBlocksBatch(t *testing.T) {
+	testHome(t)
+	blocks := []recallArchiveInput{
+		{Label: "premier", Role: "tool", Content: "contenu un"},
+		{Label: "second", Role: "assistant", Content: "contenu deux"},
+	}
+	entries, err := archiveRecallBlocks(blocks)
+	if err != nil {
+		t.Fatalf("archive batch: %v", err)
+	}
+	if len(entries) != len(blocks) {
+		t.Fatalf("reçu %d ids pour %d blocs", len(entries), len(blocks))
+	}
+	for i, entry := range entries {
+		block, ok := recallGet(entry.id)
+		if !ok {
+			t.Fatalf("bloc %q introuvable", entry.id)
+		}
+		if block.Label != blocks[i].Label || block.Role != blocks[i].Role || block.Content != blocks[i].Content {
+			t.Fatalf("bloc %q différent de l'entrée %d: %+v", entry.id, i, block)
+		}
+		if i > 0 {
+			prev, _ := recallIDToSeq(entries[i-1].id)
+			current, _ := recallIDToSeq(entry.id)
+			if current != prev+1 {
+				t.Fatalf("séquence non contiguë dans le batch: %d puis %d", prev, current)
+			}
+		}
 	}
 }
 
@@ -161,5 +193,65 @@ func TestCompactNoArchiveWithoutAgent(t *testing.T) {
 	_, _ = compactMessages(t.Context(), msgs, Caps{}) // agent off
 	if hits := recallSearch("volumineux", 5); len(hits) != 0 {
 		t.Fatalf("archivage effectué sans mode agent (%d blocs)", len(hits))
+	}
+}
+
+// Une compaction refusée (réduction insuffisante) ne laisse aucune archive
+// orpheline : un seul bloc archivable, trop petit devant le reste du torse.
+func TestCompactDoesNotArchiveWhenReductionIsRejected(t *testing.T) {
+	testHome(t)
+	summarizerStub(t, "trop court")
+	msgs := []Message{um("question initiale"), am("archive_should_not_be_written " + strings.Repeat("contenu assistant ", 60))}
+	for i := 0; i < 10; i++ {
+		msgs = append(msgs, um("suite"), am(strings.Repeat("réponse moyenne ", 40)))
+	}
+	if _, changed := compactMessages(t.Context(), msgs, Caps{Agent: true}); changed {
+		t.Fatal("une compaction sans réduction suffisante a été acceptée")
+	}
+	if hits := recallSearch("archive_should_not_be_written", 5); len(hits) != 0 {
+		t.Fatalf("un bloc a été archivé alors que la compaction a été refusée (%d blocs)", len(hits))
+	}
+}
+
+// Archivage impossible (base indisponible) : la compaction a quand même lieu,
+// sans marqueur recall, plutôt que de laisser la fenêtre déborder.
+func TestCompactFallsBackWhenArchiveFails(t *testing.T) {
+	testHome(t)
+	summarizerStub(t, "Résumé : l'utilisateur écrit un jeu en Go, le fichier principal est déjà rédigé et testé.")
+	prev := recallArchive
+	recallArchive = func([]recallArchiveInput) ([]recallEntry, error) {
+		return nil, errors.New("base indisponible")
+	}
+	t.Cleanup(func() { recallArchive = prev })
+
+	msgs := []Message{um("écris le jeu"), am(strings.Repeat("contenu assistant ", 100))}
+	for i := 0; i < 16; i++ {
+		msgs = append(msgs, um("suite"), am("réponse courte"))
+	}
+	out, changed := compactMessages(t.Context(), msgs, Caps{Agent: true})
+	if !changed {
+		t.Fatal("la compaction a été abandonnée parce que l'archivage a échoué")
+	}
+	for _, m := range out {
+		if strings.Contains(msgText(m), "recall:r") {
+			t.Fatalf("marqueur recall sans archive derrière : %q", msgText(m))
+		}
+	}
+}
+
+// Résumé raté : le repli dégraissé doit quand même porter les marqueurs recall
+// des blocs archivés, sinon il ne réduit rien et la compaction est refusée.
+func TestCompactArchivesWhenSummaryFails(t *testing.T) {
+	testHome(t)
+	summarizerStub(t, "")
+	msgs := []Message{um("écris le jeu"), am("marqueur_plugh " + strings.Repeat("contenu assistant ", 100))}
+	for i := 0; i < 16; i++ {
+		msgs = append(msgs, um("suite"), am("réponse courte"))
+	}
+	if _, changed := compactMessages(t.Context(), msgs, Caps{Agent: true}); !changed {
+		t.Fatal("repli sans résumé refusé alors que l'archivage suffisait à réduire")
+	}
+	if hits := recallSearch("marqueur_plugh", 5); len(hits) != 1 {
+		t.Fatalf("attendu 1 bloc archivé, reçu %d", len(hits))
 	}
 }

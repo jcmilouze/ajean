@@ -47,6 +47,95 @@ func TestCloudModelURL(t *testing.T) {
 	}
 }
 
+func TestCloudDraftAndOutputBudget(t *testing.T) {
+	cfg := map[string]string{
+		"CLOUD":           "modal",
+		"CLOUD_MODEL":     "https://huggingface.co/example/target/resolve/main/target.gguf",
+		"CLOUD_DRAFT":     "https://huggingface.co/example/draft/blob/main/draft-Q4_K_M.gguf",
+		"CLOUD_N_PREDICT": "4800",
+		"EXTRA_ARGS":      "--flash-attn on --spec-type draft-dflash --spec-draft-n-max 5 --model-draft C:/local/draft.gguf --jinja",
+	}
+	args, err := cloudServerArgs(cfg, "secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(args, " ")
+	for _, want := range []string{
+		"--model-draft /models/draft-Q4_K_M.gguf", "--n-predict 4800",
+		"--spec-type draft-dflash", "--spec-draft-n-max 5",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("missing %q: %s", want, joined)
+		}
+	}
+	if strings.Contains(joined, "C:/local/draft.gguf") {
+		t.Fatalf("local draft path must not reach Modal: %s", joined)
+	}
+	files := cloudFiles(cfg)
+	if len(files) != 2 || files[1]["file"] != "draft-Q4_K_M.gguf" ||
+		files[1]["url"] != "https://huggingface.co/example/draft/resolve/main/draft-Q4_K_M.gguf" {
+		t.Fatalf("target and draft must be downloaded to the Modal volume: %+v", files)
+	}
+	oldFP := cloudFingerprint(cfg)
+	cfg["CLOUD_DRAFT"] = "https://huggingface.co/example/draft/resolve/main/draft-Q8_0.gguf"
+	if cloudFingerprint(cfg) == oldFP {
+		t.Fatal("changing the draft must redeploy")
+	}
+	cfg["CLOUD_DRAFT"] = "https://huggingface.co/example/draft/resolve/main/draft-Q4_K_M.gguf"
+	oldFP = cloudFingerprint(cfg)
+	cfg["CLOUD_N_PREDICT"] = "6000"
+	if cloudFingerprint(cfg) == oldFP {
+		t.Fatal("changing the output budget must redeploy")
+	}
+}
+
+func TestCloudDraftAndPredictInvalid(t *testing.T) {
+	cfg := map[string]string{
+		"CLOUD_MODEL": "https://huggingface.co/example/resolve/main/target.gguf",
+		"CLOUD_DRAFT": "https://huggingface.co/example/draft",
+	}
+	if _, err := cloudServerArgs(cfg, ""); err == nil {
+		t.Fatal("draft without .gguf must be rejected")
+	}
+	cfg["CLOUD_DRAFT"] = "https://huggingface.co/example/draft.gguf"
+	for _, invalid := range []string{"0", "-1", "nan", "4.8k"} {
+		cfg["CLOUD_N_PREDICT"] = invalid
+		if _, err := cloudServerArgs(cfg, ""); err == nil {
+			t.Errorf("invalid output budget %q accepted", invalid)
+		}
+	}
+}
+
+// Un preset sans draft ni budget garde l'empreinte d'avant ces options : pas de
+// redéploiement des presets existants à la mise à jour.
+func TestCloudFingerprintStableWithoutDraft(t *testing.T) {
+	cfg := map[string]string{
+		"CLOUD":       "modal",
+		"CLOUD_MODEL": "https://huggingface.co/example/target/resolve/main/target.gguf",
+	}
+	args, err := cloudServerArgs(cfg, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := configFingerprint(map[string]string{
+		"a": strings.Join(args, "\x00"), "g": cloudGPU(cfg), "m": cfg["CLOUD_MODEL"],
+		"v": "", "i": cloudIdle(cfg), "p": "",
+	})
+	if got := cloudFingerprint(cfg); got != want {
+		t.Fatalf("empreinte modifiée pour un preset sans draft : %s != %s", got, want)
+	}
+}
+
+func TestCloudDraftSameFileRejected(t *testing.T) {
+	cfg := map[string]string{
+		"CLOUD_MODEL": "https://huggingface.co/example/a/resolve/main/model.gguf",
+		"CLOUD_DRAFT": "https://huggingface.co/example/b/resolve/main/model.gguf",
+	}
+	if _, err := cloudServerArgs(cfg, ""); err == nil {
+		t.Fatal("un draft du même nom que le modèle doit être refusé")
+	}
+}
+
 func TestUsesRemoteEndpoint(t *testing.T) {
 	if !usesRemoteEndpoint(map[string]string{"CLOUD": "modal"}) || !usesRemoteEndpoint(map[string]string{"EXTERNAL": "1"}) {
 		t.Fatal("cloud et externe n'ont pas de moteur local")
@@ -68,6 +157,46 @@ func TestModalErrorText(t *testing.T) {
 	}
 	if got := modalErrorText("│ something odd happened │"); got != "something odd happened" {
 		t.Errorf("brut : %q", got)
+	}
+}
+
+func TestModalDeployURL(t *testing.T) {
+	const want = "https://testaccount--ajean-coder390-modal-l40s-8k-validation-serve.modal.run"
+	tests := []struct {
+		name   string
+		output string
+		want   string
+	}{
+		{
+			name:   "normal deployment",
+			output: "✓ Created Function serve\n    └── " + want + " (unauthenticated)\n✓ App deployed!\n",
+			want:   want,
+		},
+		{
+			name:   "hard wrapped hostname",
+			output: "✓ Created Function serve\n    └── https://testaccount--ajean-coder390-modal-l40s-8k-validation-serve.moda\n        l.run (unauthenticated)\n✓ App deployed!\n",
+			want:   want,
+		},
+		{
+			name:   "wrapped even earlier",
+			output: "    └── https://testaccount--ajean-coder390-modal-\r\n        l40s-8k-validation-serve.mo\r\n        dal.run (unauthenticated)\r\n✓ Deployment skipped: no changes detected!\r\n",
+			want:   want,
+		},
+		{
+			name:   "unrelated URL is not an endpoint",
+			output: "View Deployment: https://modal.com/apps/testaccount/main/deployed/example\n",
+		},
+		{
+			name:   "missing endpoint",
+			output: "Error: deployment failed\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := modalDeployURL(tt.output); got != tt.want {
+				t.Fatalf("modalDeployURL() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

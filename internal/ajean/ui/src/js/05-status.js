@@ -300,11 +300,20 @@ function fmtCtxTokens(n){
 // n'apparaît que si un effort est défini — c'est le sens de « quand on a défini un
 // niveau sur un preset » : on ne propose de le changer que là où il compte.
 let REASON_EFFORT = null; // null = pas encore chargé
-function updateReasonBtn(eff){
+// Moteur MoE (Qwen3.8 Flash Next) : il prend toujours le niveau en compte, le
+// raccourci est donc toujours là. Son gabarit connaît low, medium et xhigh (son
+// défaut) ; « high » y vaut xhigh.
+let REASON_MOE = false;
+function reasonLevel(){
+  const e=(REASON_EFFORT||'').trim();
+  return REASON_MOE ? ((!e || e==='high') ? 'xhigh' : e) : e;
+}
+function updateReasonBtn(eff, moe){
   REASON_EFFORT = eff==null ? REASON_EFFORT : eff;
+  if(moe!=null) REASON_MOE = !!moe;
   const btn=document.getElementById('reason-btn');
   if(!btn) return;
-  const e=(REASON_EFFORT||'').trim();
+  const e=reasonLevel();
   // Pas d'effort défini sur le preset → pas de raccourci (on ne veut pas envoyer
   // reasoning_effort à un moteur lancé sans --jinja, où il n'aurait aucun effet).
   if(!e){ btn.style.display='none'; return; }
@@ -317,8 +326,11 @@ function updateReasonBtn(eff){
 }
 function toggleReasonMenu(ev){
   ev.stopPropagation();
-  const menu=document.getElementById('reason-menu'), cur=(REASON_EFFORT||'').trim();
-  menu.querySelectorAll('button').forEach(b=>b.classList.toggle('on', b.dataset.eff===cur)); // niveau courant
+  const menu=document.getElementById('reason-menu'), cur=reasonLevel();
+  menu.querySelectorAll('button').forEach(b=>{
+    b.classList.toggle('on', b.dataset.eff===cur); // niveau courant
+    b.style.display = (REASON_MOE && b.dataset.eff==='high') ? 'none' : '';
+  });
   toggleMenu(menu, document.getElementById('reason-btn'), {side:'above', align:'right'});
 }
 const closeReasonMenu = ()=>closeMenu();
@@ -388,10 +400,15 @@ function renderVram(gpus){
       '<span class="stat-v">'+(g.total? (g.total/1024).toFixed(0)+' GiB' : '')+'</span></div>'+
       '<div class="stat-s">'+cloudCardStatus(g)+(g.billing? ' · '+escHtml(cloudCreditText(g.billing)) : '')+'</div></div>';
     const pct=Math.round(g.used*100/g.total);
+    // Température : 0 = inconnue (Apple Silicon, Vulkan, AMD/Intel sous Windows),
+    // on la tait plutôt que d'afficher « 0 °C ». Mémoire unifiée (Mac) : le total
+    // est la RAM elle-même, on le dit pour que les deux jauges ne se contredisent pas.
+    const temp = g.temp > 0 ? ' · '+g.temp+' °C' : '';
+    const unified = g.unified ? ' · '+escHtml(t('status.unified_mem')) : '';
     return '<div class="stat"><div class="stat-h"><span class="stat-n">'+g.name+'</span>'+
       '<span class="stat-v">'+(g.used/1024).toFixed(1)+' / '+(g.total/1024).toFixed(1)+' GiB</span></div>'+
       '<div class="bar"><div style="width:'+pct+'%"></div></div>'+
-      '<div class="stat-s">GPU '+g.util+' % · '+g.temp+' °C'+(g.cloud?' · '+cloudCardStatus(g):'')+(g.billing? ' · '+escHtml(cloudCreditText(g.billing)) : '')+'</div></div>';
+      '<div class="stat-s">GPU '+g.util+' %'+temp+unified+(g.cloud?' · '+cloudCardStatus(g):'')+(g.billing? ' · '+escHtml(cloudCreditText(g.billing)) : '')+'</div></div>';
   }).join('')); // pas de GPU : rien du tout, la carte RAM suffit
 }
 // Rend le bloc RAM depuis {used,total}. Séparé du fetch (voir renderVram).
@@ -448,11 +465,13 @@ async function loadCfg(){
     rows.push(row(t('status.cfg_engine'), 'GPU Cloud (Modal)'));
     rows.push(row('GPU', c.CLOUD_GPU||'A10G'));
     if(c.CLOUD_MODEL) rows.push(row('MODEL', c.CLOUD_MODEL.split('?')[0].split('/').pop(), c.CLOUD_MODEL));
+    if(c.CLOUD_DRAFT) rows.push(row('DRAFT', c.CLOUD_DRAFT.split('?')[0].split('/').pop(), c.CLOUD_DRAFT));
+    if(c.CLOUD_N_PREDICT) rows.push(row('N_PREDICT', c.CLOUD_N_PREDICT));
     ['CTX','KV_TYPE','BATCH','UBATCH','NGL'].filter(k=>c[k]).forEach(k=>rows.push(row(k, c[k])));
     const sp=(c.EXTRA_ARGS||'').match(/--spec-type\s+(\S+)/);
     if(sp) rows.push(row('SPEC', sp[1]));
     swapContent(document.getElementById('cfg'), rows.join(''));
-    updateReasonBtn(c.REASONING_EFFORT || '');
+    updateReasonBtn(c.REASONING_EFFORT || '', false);
     return;
   }
   if(c.EXTERNAL==='1'){
@@ -470,7 +489,7 @@ async function loadCfg(){
       rows.push(row(t('external.key_label'), mask, ''));
     }
     swapContent(document.getElementById('cfg'), rows.join(''));
-    updateReasonBtn('');
+    updateReasonBtn('', false);
     return;
   }
   // Moteur optimisé (Qwen3.8 Flash Next) : la config réelle de lancement,
@@ -494,7 +513,7 @@ async function loadCfg(){
       if(d.vision_gpu) rows.push(row('VISION', 'on', d.vision_gpu));
     }else if(c.CTX) rows.push(row('CTX', c.CTX));
     swapContent(document.getElementById('cfg'), rows.join(''));
-    updateReasonBtn(c.REASONING_EFFORT || '');
+    updateReasonBtn(c.REASONING_EFFORT || '', true);
     return;
   }
   if(c.BIN){
@@ -526,5 +545,5 @@ async function loadCfg(){
   // Raccourci « niveau de réflexion » du composeur : présent seulement si le preset
   // actif définit un effort. Rafraîchi à chaque loadCfg (donc après une bascule de
   // preset ou une édition).
-  updateReasonBtn(c.REASONING_EFFORT || '');
+  updateReasonBtn(c.REASONING_EFFORT || '', false);
 }

@@ -341,10 +341,9 @@ func compactMessages(ctx context.Context, msgs []Message, caps Caps) ([]Message,
 	//    agressif — rien n'est perdu, seulement déplacé hors du contexte.
 	//    On n'archive QUE si le modèle a réellement ses outils (mode agent) : sans
 	//    eux il ne pourrait pas rappeler, autant garder un résumé propre sans ids.
-	//    Un échec d'écriture (base absente, tests) laisse archived[i] nil → repli
-	//    transparent sur le comportement classique (troncature/marqueur sans id).
-	archived := make([]*recallEntry, len(torso))
-	var index []recallEntry
+	//    Les blocs sont préparés ici, mais écrits ensemble seulement après avoir
+	//    confirmé que la compaction atteint sa réduction minimale.
+	archiveCandidates := make([]*recallArchiveInput, len(torso))
 	// Pas en mode terminal : il n'a pas l'outil recall, des ids seraient inutilisables.
 	if caps.Agent && !caps.Terminal && compactEnabled() {
 		names := torsoToolNames(torso)
@@ -354,31 +353,7 @@ func compactMessages(ctx context.Context, msgs []Message, caps Caps) ([]Message,
 			}
 			content := msgText(m)
 			label := recallLabel(m.Role, names[m.ToolCallID], content)
-			id, aerr := archiveRecallBlock(label, m.Role, content)
-			if aerr != nil {
-				continue
-			}
-			archived[i] = &recallEntry{id: id, label: label}
-			index = append(index, recallEntry{id: id, label: label})
-		}
-	}
-
-	// 4. Dégraissage sans IA : les vieux résultats d'outils longs deviennent un
-	//    marqueur. On travaille sur une copie pour ne pas muter l'historique amont.
-	//    ⚠️ Ce torse dégraissé ne sert QUE de repli si le résumé échoue — surtout
-	//    PAS d'entrée au résumeur, cf. juste en dessous. Un bloc archivé pointe vers
-	//    son id (récupérable par recall) au lieu d'être effacé aveuglément.
-	pruned := make([]Message, len(torso))
-	for i, m := range torso {
-		pruned[i] = m
-		if e := archived[i]; e != nil {
-			pruned[i].Content = recallMarker(e.id, e.label)
-			continue
-		}
-		if m.Role == "tool" {
-			if t := msgText(m); len(t) > compactToolPruneLen {
-				pruned[i].Content = compactPrunedMarker
-			}
+			archiveCandidates[i] = &recallArchiveInput{Label: label, Role: m.Role, Content: content}
 		}
 	}
 
@@ -401,7 +376,7 @@ func compactMessages(ctx context.Context, msgs []Message, caps Caps) ([]Message,
 	forSummary := make([]Message, len(torso))
 	for i, m := range torso {
 		forSummary[i] = m
-		if archived[i] != nil {
+		if archiveCandidates[i] != nil {
 			r := []rune(msgText(m))
 			headTxt := string(r)
 			if len(r) > recallSummaryHeadLen {
@@ -417,7 +392,6 @@ func compactMessages(ctx context.Context, msgs []Message, caps Caps) ([]Message,
 		}
 	}
 	summary, err := summarizeTranscript(ctx, renderTranscript(forSummary))
-	var mid []Message
 	// La cause d'un résumé raté n'était écrite nulle part : on ne voyait que des
 	// compactions « changé=false » à répétition, sans savoir pourquoi.
 	if err != nil {
@@ -425,23 +399,6 @@ func compactMessages(ctx context.Context, msgs []Message, caps Caps) ([]Message,
 	} else if summaryLooksEmpty(summary) {
 		fmt.Fprintf(compactLogOut, "[compact] résumé vide ou dégénéré (%d car.)\n", len([]rune(strings.TrimSpace(summary))))
 	}
-	if err != nil || summaryLooksEmpty(summary) {
-		// Résumé raté (erreur, vide, ou juste une référence recall) → on garde le
-		// torse dégraissé, qui porte au moins les têtes de blocs + les marqueurs
-		// recall : bien plus informatif qu'un résumé dégénéré.
-		mid = pruned
-	} else {
-		// Le résumé est injecté comme un tour utilisateur→assistant (jamais un
-		// message `system` au milieu : certains gabarits, ex. Qwen, exigent que le
-		// system soit uniquement en tête — cf. mémoire qwen36-chat-template-fix).
-		// Le message porte aussi la CONSCIENCE de la compaction et l'index des ids
-		// rappelables (voir compactSummaryUserMsg).
-		mid = []Message{
-			{Role: "user", Content: compactSummaryUserMsg(summary, index)},
-			{Role: "assistant", Content: "Understood. I'll resume from exactly where I left off, using the findings above, and call recall(id) if I need the full content of an archived block, without redoing work that is already done."},
-		}
-	}
-
 	// La demande EN COURS ne doit JAMAIS être diluée dans le résumé. Pendant une
 	// longue boucle d'outils (recherche web : dix pages lues d'affilée), la queue
 	// n'est faite que d'appels d'outils : le message `user` qui a lancé la
@@ -478,19 +435,99 @@ func compactMessages(ctx context.Context, msgs []Message, caps Caps) ([]Message,
 		pending = []Message{torso[i]}
 		break
 	}
-
-	out := make([]Message, 0, head+len(mid)+len(pending)+len(msgs)-tailStart)
-	out = append(out, msgs[:head]...)
-	out = append(out, mid...)
-	out = append(out, pending...)
-	out = append(out, msgs[tailStart:]...)
+	// 4. Assemblage du résultat. ids[i] porte l'id du bloc i s'il est archivé,
+	//    "" sinon (ids nil = aucune archive) : le même code sert à la mesure avant
+	//    écriture, au résultat final et au repli sans archive.
+	//    Dégraissage sans IA : les vieux résultats d'outils longs deviennent un
+	//    marqueur. On travaille sur une copie pour ne pas muter l'historique amont.
+	//    ⚠️ Ce torse dégraissé ne sert QUE de repli si le résumé échoue — surtout
+	//    PAS d'entrée au résumeur, cf. plus haut. Un bloc archivé pointe vers
+	//    son id (récupérable par recall) au lieu d'être effacé aveuglément.
+	assemble := func(ids []string) []Message {
+		var index []recallEntry
+		pruned := make([]Message, len(torso))
+		for i, m := range torso {
+			pruned[i] = m
+			if ids != nil && ids[i] != "" {
+				label := archiveCandidates[i].Label
+				pruned[i].Content = recallMarker(ids[i], label)
+				index = append(index, recallEntry{id: ids[i], label: label})
+				continue
+			}
+			if m.Role == "tool" {
+				if t := msgText(m); len(t) > compactToolPruneLen {
+					pruned[i].Content = compactPrunedMarker
+				}
+			}
+		}
+		// Résumé raté (erreur, vide, ou juste une référence recall) → on garde le
+		// torse dégraissé, qui porte au moins les têtes de blocs + les marqueurs
+		// recall : bien plus informatif qu'un résumé dégénéré.
+		mid := pruned
+		if summarized {
+			// Le résumé est injecté comme un tour utilisateur→assistant (jamais un
+			// message `system` au milieu : certains gabarits, ex. Qwen, exigent que le
+			// system soit uniquement en tête — cf. mémoire qwen36-chat-template-fix).
+			// Le message porte aussi la CONSCIENCE de la compaction et l'index des ids
+			// rappelables (voir compactSummaryUserMsg).
+			mid = []Message{
+				{Role: "user", Content: compactSummaryUserMsg(summary, index)},
+				{Role: "assistant", Content: "Understood. I'll resume from exactly where I left off, using the findings above, and call recall(id) if I need the full content of an archived block, without redoing work that is already done."},
+			}
+		}
+		out := make([]Message, 0, head+len(mid)+len(pending)+len(msgs)-tailStart)
+		out = append(out, msgs[:head]...)
+		out = append(out, mid...)
+		out = append(out, pending...)
+		out = append(out, msgs[tailStart:]...)
+		return out
+	}
 
 	// Garantie de réduction : on n'accepte la compaction que si elle enlève au
 	// moins ~20% du contexte estimé. Sinon (torse déjà maigre, résumé peu rentable)
 	// on la refuse — sans ça, ajean « compactait » à presque chaque message sans
 	// vraiment réduire, puis re-déclenchait aussitôt.
-	before, after := estimateTokens(msgs), estimateTokens(out)
-	if after > before*4/5 {
+	before := estimateTokens(msgs)
+	reduces := func(out []Message) bool { return estimateTokens(out) <= before*4/5 }
+
+	var blocks []recallArchiveInput
+	for _, c := range archiveCandidates {
+		if c != nil {
+			blocks = append(blocks, *c)
+		}
+	}
+	if len(blocks) > 0 {
+		// Mesure AVANT d'écrire, avec des ids de longueur maximale (uint64 en
+		// décimal) : les ids réels, plus courts, ne peuvent pas faire repasser le
+		// résultat au-dessus du seuil. Une compaction refusée n'archive donc rien.
+		worst := make([]string, len(torso))
+		for i, c := range archiveCandidates {
+			if c != nil {
+				worst[i] = "r" + strings.Repeat("9", 20)
+			}
+		}
+		if !reduces(assemble(worst)) {
+			return msgs, false
+		}
+		entries, aerr := recallArchive(blocks)
+		if aerr == nil && len(entries) == len(blocks) {
+			ids := make([]string, len(torso))
+			n := 0
+			for i, c := range archiveCandidates {
+				if c != nil {
+					ids[i] = entries[n].id
+					n++
+				}
+			}
+			return assemble(ids), true
+		}
+		// Écriture impossible (base absente, disque plein) : repli sur le
+		// comportement classique, troncature et marqueurs sans id. Renoncer à
+		// compacter laisserait la fenêtre déborder.
+		fmt.Fprintf(compactLogOut, "[compact] archivage recall raté, compaction sans rappel : %v\n", aerr)
+	}
+	out := assemble(nil)
+	if !reduces(out) {
 		return msgs, false
 	}
 	return out, true

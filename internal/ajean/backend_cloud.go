@@ -14,6 +14,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,6 +29,8 @@ import (
 //   CLOUD_GPU=A10G     type de GPU Modal (T4, L4, A10G, L40S, A100-80GB, H100…)
 //   CLOUD_MODEL=<url>  lien Hugging Face direct vers le .gguf
 //   CLOUD_MMPROJ=<url> lien vers le projecteur vision (optionnel)
+//   CLOUD_DRAFT=<url> lien vers le modèle draft GGUF (optionnel)
+//   CLOUD_N_PREDICT=N budget de sortie par défaut (optionnel)
 //
 // Le déploiement passe par la CLI `modal` (pip install modal + modal setup sur
 // la machine qui fait tourner AJEAN). Le modèle est téléchargé une fois dans un
@@ -35,13 +38,15 @@ import (
 // après CLOUD_IDLE secondes sans requête : on ne paie que l'usage.
 
 const (
-	cloudKeyFlag  = "CLOUD"
-	cloudKeyGPU   = "CLOUD_GPU"
-	cloudKeyModel = "CLOUD_MODEL"
-	cloudKeyIdle  = "CLOUD_IDLE"
-	cloudKeyProf  = "CLOUD_PROFILE" // profil Modal (compte) ; vide = profil actif de la CLI
-	cloudKeyMM    = "CLOUD_MMPROJ"  // lien direct vers le projecteur vision (mmproj .gguf), optionnel
-	cloudVolume   = "ajean-models"
+	cloudKeyFlag    = "CLOUD"
+	cloudKeyGPU     = "CLOUD_GPU"
+	cloudKeyModel   = "CLOUD_MODEL"
+	cloudKeyIdle    = "CLOUD_IDLE"
+	cloudKeyProf    = "CLOUD_PROFILE"   // profil Modal (compte) ; vide = profil actif de la CLI
+	cloudKeyMM      = "CLOUD_MMPROJ"    // lien direct vers le projecteur vision (mmproj .gguf), optionnel
+	cloudKeyDraft   = "CLOUD_DRAFT"     // lien direct vers un modèle draft GGUF, optionnel
+	cloudKeyPredict = "CLOUD_N_PREDICT" // tokens à générer par défaut (requête explicite prioritaire)
+	cloudVolume     = "ajean-models"
 )
 
 func isCloudConfig(cfg map[string]string) bool {
@@ -85,14 +90,21 @@ func cloudReady(cfg map[string]string) bool {
 // cloudFingerprint : ce qui, s'il change, exige un redéploiement.
 func cloudFingerprint(cfg map[string]string) string {
 	args, _ := cloudServerArgs(cfg, "")
-	return configFingerprint(map[string]string{
+	fp := map[string]string{
 		"a": strings.Join(args, "\x00"),
 		"g": cloudGPU(cfg),
 		"m": cfg[cloudKeyModel],
 		"v": cfg[cloudKeyMM],
 		"i": cloudIdle(cfg),
 		"p": cloudProfile(cfg),
-	})
+	}
+	// Seulement s'il y en a un : une clé vide changerait l'empreinte des presets
+	// déjà déployés et les ferait tous redéployer. Le budget de sortie est déjà
+	// dans les arguments.
+	if d := strings.TrimSpace(cfg[cloudKeyDraft]); d != "" {
+		fp["d"] = d
+	}
+	return configFingerprint(fp)
 }
 
 func cloudGPU(cfg map[string]string) string {
@@ -133,11 +145,10 @@ func cloudModelFile(link string) string {
 	return path.Base(link)
 }
 
-// cloudFiles : fichiers à télécharger dans le volume (modèle, puis projecteur
-// vision s'il y en a un).
+// cloudFiles : fichiers à télécharger dans le volume (cible, vision, draft).
 func cloudFiles(cfg map[string]string) []map[string]string {
 	var out []map[string]string
-	for _, k := range []string{cloudKeyModel, cloudKeyMM} {
+	for _, k := range []string{cloudKeyModel, cloudKeyMM, cloudKeyDraft} {
 		if l := strings.TrimSpace(cfg[k]); l != "" {
 			out = append(out, map[string]string{"url": cloudModelURL(l), "file": cloudModelFile(l)})
 		}
@@ -226,6 +237,25 @@ func cloudServerArgs(cfg map[string]string, key string) ([]string, error) {
 		}
 		args = append(args, "--mmproj", "/models/"+mf)
 	}
+	if draft := strings.TrimSpace(cfg[cloudKeyDraft]); draft != "" {
+		df := cloudModelFile(draft)
+		if !strings.HasSuffix(strings.ToLower(df), ".gguf") {
+			return nil, fmt.Errorf("lien du modèle draft invalide : il faut un lien direct vers un .gguf")
+		}
+		// Même nom que le modèle ou le projecteur : un seul fichier dans le volume,
+		// le second téléchargement serait sauté et le draft serait le modèle lui-même.
+		if df == file || (strings.TrimSpace(cfg[cloudKeyMM]) != "" && df == cloudModelFile(cfg[cloudKeyMM])) {
+			return nil, fmt.Errorf("le modèle draft doit porter un autre nom de fichier que le modèle et le projecteur vision")
+		}
+		args = append(args, "--model-draft", "/models/"+df)
+	}
+	if predict := strings.TrimSpace(cfg[cloudKeyPredict]); predict != "" {
+		n, e := strconv.Atoi(predict)
+		if e != nil || n < 1 {
+			return nil, fmt.Errorf("CLOUD_N_PREDICT invalide : entier positif attendu")
+		}
+		args = append(args, "--n-predict", strconv.Itoa(n))
+	}
 	if key != "" {
 		args = append(args, "--api-key", key)
 	}
@@ -233,7 +263,7 @@ func cloudServerArgs(cfg map[string]string, key string) ([]string, error) {
 	// chemins de fichiers locaux, qui n'existent pas dans le conteneur.
 	extra := splitArgs(cfg["EXTRA_ARGS"])
 	drop := map[string]bool{"--device": true, "-dev": true, "--tensor-split": true, "-ts": true,
-		"--main-gpu": true, "-mg": true, "--mmproj": true, "--model-draft": true, "-md": true,
+		"--main-gpu": true, "-mg": true, "--mmproj": true, "--model-draft": true, "-md": true, "--spec-draft-model": true,
 		"--chat-template-file": true, "--threads": true, "-t": true, "-tb": true, "--threads-batch": true}
 	for i := 0; i < len(extra); i++ {
 		if drop[extra[i]] {
@@ -283,6 +313,20 @@ def serve():
 `
 
 var cloudURLRe = regexp.MustCompile(`https://[A-Za-z0-9.-]+\.modal\.run`)
+
+// Modal's CLI wraps long URLs to a terminal width, even when stdout is
+// captured: "...serve.moda" may be followed by an indented "l.run" on the
+// next line. Rejoin only URL-shaped fragments before validating the endpoint.
+var cloudWrappedURLRe = regexp.MustCompile(`https://[A-Za-z0-9.-]+(?:\r?\n[ \t]*[A-Za-z0-9.-]+)*`)
+
+func modalDeployURL(output string) string {
+	for _, fragment := range cloudWrappedURLRe.FindAllString(output, -1) {
+		if url := cloudURLRe.FindString(strings.Join(strings.Fields(fragment), "")); url != "" {
+			return url
+		}
+	}
+	return ""
+}
 
 // modalCommand trouve le client Modal : le runtime privé d'AJEAN s'il est
 // installé, sinon une CLI déjà présente sur la machine. Sans l'un ni l'autre,
@@ -393,7 +437,7 @@ func runCloudDeploy(cfg map[string]string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("déploiement Modal impossible : %s", modalErrorText(string(out)))
 	}
-	url := cloudURLRe.FindString(string(out))
+	url := modalDeployURL(string(out))
 	if url == "" {
 		return "", fmt.Errorf("modal deploy n'a renvoyé aucune URL")
 	}
@@ -567,6 +611,8 @@ func cloudGPUInfo() map[string]any {
 			link := cfg[cloudKeyModel]
 			if mm := cfg[cloudKeyMM]; mm != "" && cloudModelFile(mm) == m.partFile {
 				link = mm
+			} else if draft := cfg[cloudKeyDraft]; draft != "" && cloudModelFile(draft) == m.partFile {
+				link = draft
 			}
 			out["used"], out["total"] = m.partMB, cloudModelSizeMB(link)
 		case len(m.vals) == 4:

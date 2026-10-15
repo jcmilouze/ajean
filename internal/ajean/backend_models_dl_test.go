@@ -135,3 +135,57 @@ func TestRunDownloadParallelAndFallback(t *testing.T) {
 		}
 	}
 }
+
+type slowWriter struct{ http.ResponseWriter }
+
+func (s slowWriter) Write(b []byte) (int, error) {
+	time.Sleep(2 * time.Millisecond)
+	return s.ResponseWriter.Write(b)
+}
+
+// Une pause coupe le flux, garde ce qui est écrit, et la reprise termine un
+// fichier identique à la source.
+func TestRunDownloadPauseResume(t *testing.T) {
+	data := make([]byte, 48<<20)
+	rand.New(rand.NewSource(2)).Read(data)
+	t.Setenv("AJEAN_DL_CONNS", "4")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeContent(slowWriter{w}, r, "m.gguf", time.Time{}, bytes.NewReader(data))
+	}))
+	defer srv.Close()
+
+	dest := filepath.Join(t.TempDir(), "m.gguf")
+	st := &dlState{Filename: "m.gguf", gate: newDlGate()}
+	done := make(chan struct{})
+	go func() {
+		runDownloadSet(context.Background(), st, []string{srv.URL + "/m.gguf"}, []string{dest})
+		close(done)
+	}()
+
+	time.Sleep(300 * time.Millisecond)
+	st.gate.setPaused(true)
+	time.Sleep(1500 * time.Millisecond) // le compteur publié se fige
+	dlMu.Lock()
+	a := st.Done
+	dlMu.Unlock()
+	time.Sleep(1500 * time.Millisecond)
+	dlMu.Lock()
+	b, fin := st.Done, st.Finished
+	dlMu.Unlock()
+	if fin || a != b || a == 0 {
+		t.Fatalf("pause inopérante : %d puis %d octets, terminé=%v", a, b, fin)
+	}
+	st.gate.setPaused(false)
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("pas terminé après la reprise")
+	}
+	if st.Err != "" {
+		t.Fatalf("erreur après reprise : %s", st.Err)
+	}
+	got, err := os.ReadFile(dest)
+	if err != nil || !bytes.Equal(got, data) {
+		t.Fatalf("fichier différent de la source après reprise (err=%v)", err)
+	}
+}

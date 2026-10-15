@@ -1,22 +1,47 @@
-Le mode Jean sort de la bêta.
+Nouveau moteur MoE pour Qwen3.8 Flash Next, plus rapide en génération comme en lecture des messages courts.
 
-## Jean, assistant personnel
+## Moteur AJEAN MoE 1.1
 
-Après plusieurs semaines d'utilisation quotidienne, le mode Jean n'est plus marqué « Beta ». Pour rappel, Jean :
+Le moteur optimisé de Qwen3.8 Flash Next passe en version 1.1. Mesures sur la machine de test (RTX 5060 Ti 16 Go + RTX 3070 8 Go, 46 Go de RAM, Swift 1.5 IQ3_XXS) :
 
-- garde **sa propre mémoire** : un profil court, des fiches (procédures, guides) et un journal de chaque échange, consultables et modifiables depuis la fenêtre *Mémoire de Jean* ;
-- **apprend de ses erreurs** : une correction devient une leçon qui ne se répète plus, et une tâche laborieuse est rangée en fiche et en script pour aller plus vite la fois suivante ;
-- **range sa mémoire la nuit** (consolidation), avec un garde-fou qui restaure tout ce qui aurait été perdu ;
-- **repart d'un contexte vide** après 3 heures sans message (clé `JEAN_IDLE_HOURS`, `0` = jamais), après avoir relu l'ancien fil pour ne rien oublier. Le fil affiché et le journal ne bougent pas ;
-- travaille dans **son propre espace**, sans pouvoir modifier les scripts, fichiers ni la mémoire des projets.
+- **Génération** : environ 70 à 76 jetons par seconde, contre 62 à 63 avec la 1.0.
+- **Messages courts** : avec une deuxième carte, ses experts sont désormais calculés par elle pendant la lecture du prompt, au lieu d'être recopiés vers la carte principale par son lien PCIe. Un ajout de 100 jetons dans une conversation passe de 1,2 s à 0,85 s avant le premier mot, un ajout de 200 jetons de 2,0 s à 1,1 s.
+- **Longs prompts** : environ 1 000 jetons par seconde à partir de 10 000 jetons, sans changement.
+- **Experts gardés par la deuxième carte** : environ 230 de plus, en réduisant sa réserve de mémoire libre (l'encodeur d'images y tourne toujours).
+
+La mise à jour est automatique : au premier lancement d'un modèle installé avec la 1.0, le moteur 1.1 est téléchargé (environ 340 Mo) et la configuration reprise. Les modèles déjà téléchargés servent tels quels. En cas d'échec, la 1.0 continue de tourner.
+
+À savoir :
+
+- Le moteur saute désormais, pendant la génération, certains experts de faible poids absents de la carte. Les réponses peuvent donc différer très légèrement de celles de la 1.0, pour un gain de vitesse de 10 à 20 %.
+- En mode « experts de la deuxième carte hors RAM », le contexte est plafonné à 131 072 jetons : cette version demande environ 1 Go de RAM de plus, et au-delà la mémoire ne suffisait plus sur une machine de 46 Go. Le calcul de la RAM nécessaire avant installation a été ajusté en conséquence.
+- Le raccourci du niveau de réflexion est toujours proposé avec ce moteur, et le niveau choisi est gardé dans le preset au lieu de revenir au défaut à chaque changement de modèle.
+
+## Téléchargements
+
+- **Pause et reprise** : un téléchargement de modèle peut être mis en pause puis repris là où il s'était arrêté. Aucune connexion ne reste ouverte pendant la pause.
+
+## Jean
+
+- **Consolidation la nuit seulement** : le rangement de la mémoire de Jean ne démarre plus qu'entre 3 h et 5 h (heure de l'utilisateur). En journée, il occupait les cartes et faisait croire à une utilisation inexpliquée.
+
+## Cloud (Modal)
+
+- **Modèle de brouillon et budget de sortie** : un preset Modal peut utiliser un modèle de brouillon GGUF pour le décodage spéculatif, et fixer un budget de jetons en sortie. Les presets existants ne sont pas redéployés.
+- **URL de déploiement coupée** : une URL renvoyée sur deux lignes par Modal n'empêche plus la connexion.
+
+## Mac
+
+- **Panneau Appareil sur Apple Silicon** : la mémoire unifiée est affichée comme mémoire GPU, et une température inconnue n'est plus montrée.
 
 ## Corrections
 
-- **Compactage relancé en boucle.** Au cours d'une très longue tâche, quand le résumé de l'historique échouait, la compaction était retentée à chaque étape, chaque fois avec un résumé complet voué au même échec. Après un échec, elle attend désormais que le contexte ait nettement grandi avant de réessayer.
-- **Cause des résumés ratés.** Un résumé en erreur ou vide est maintenant inscrit dans le journal du service, avec sa cause, au lieu de passer inaperçu.
+- **Compactage** : les archives de rappel sont écrites en une seule fois, et le compactage se fait sans rappel au lieu d'échouer si la base est indisponible.
+
+## Non testé
+
+- L'installation à neuf du moteur MoE 1.1 n'a pas été testée de bout en bout : seule la mise à jour depuis la 1.0 l'a été.
 
 ## Mise à jour
 
     ajean update
-
-Vérifié par les tests automatiques et par l'historique d'utilisation du mode Jean sur le serveur de test (révisions, consolidations de nuit, vidage du contexte). Non testé en conditions réelles : la nouvelle temporisation du compactage pendant une longue tâche.

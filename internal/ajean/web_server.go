@@ -199,6 +199,7 @@ func newWebMux() *http.ServeMux {
 	api("/api/models/download/probe", handleModelDownloadProbe) // taille + espace libre avant de lancer
 	api("/api/models/download/status", handleModelDownloadStatus)
 	api("/api/models/download/cancel", handleModelDownloadCancel)
+	api("/api/models/download/pause", handleModelDownloadPause)
 	api("/api/backends", handleBackends)
 	api("/api/backends/custom", handleBackendsCustom)                    // backends custom uniquement (hors ⚡/🔧)
 	api("/api/backends/devices", handleBackendDevices)                   // GPU vus par CE moteur (noms/ordre propres au backend)
