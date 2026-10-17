@@ -25,6 +25,12 @@ var webPrefsAllowed = map[string]map[string]bool{
 	"hide_stats":     {"0": true, "1": true},
 	"enter_newline":  {"0": true, "1": true},
 	"lang":           {"en": true, "fr": true},
+	// Navigateur des liens externes. « auto » suit le gestionnaire de l'OS ; les
+	// autres valeurs nomment un navigateur de la famille Chromium (voir
+	// sys_browser.go). Ce réglage vit ici, et non dans le bucket `config` : un
+	// changement de preset remplace toute la config en bloc, donc il y serait
+	// effacé.
+	"link_browser": {"auto": true, "chrome": true, "edge": true, "brave": true, "chromium": true},
 }
 
 // loadWebPrefs lit les préférences enregistrées (map vide si aucune).

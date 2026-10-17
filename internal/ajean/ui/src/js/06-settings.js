@@ -199,6 +199,12 @@ async function loadAgent(){
   const on = s.enabled;
   AGENT_ON = !!on;
   document.getElementById('compact-toggle').checked = (s.compact !== false);
+  const cm = document.getElementById('compact-max');
+  if(cm){
+    const v = String(s.compact_max || 0);
+    if(![...cm.options].some(o=>o.value===v)) cm.add(new Option(Math.round(+v/1024)+'K', v));
+    cm.value = v; cm.disabled = s.compact === false;
+  }
   syncModeWithAgent();
   document.getElementById('brand').classList.toggle('agent', on);
   setAgentGate(on);
@@ -437,6 +443,14 @@ async function enableAgent(){
 async function toggleCompact(){
   const on=document.getElementById('compact-toggle').checked;
   await jpost('/api/agent/compact',{on});
+  const cm=document.getElementById('compact-max'); if(cm) cm.disabled=!on;
+}
+// Plafond du seuil de compactage (#142) : 0 = 75 % de la fenêtre du modèle.
+async function setCompactMax(){
+  const on=document.getElementById('compact-toggle').checked;
+  const max=+document.getElementById('compact-max').value;
+  const r=await jpost('/api/agent/compact',{on, max});
+  if(r && r.ok===false) toast(r.error||'erreur');
 }
 // Mode mémoire (4 états, par projet) — indépendant du mode agent. La description
 // de chaque mode vit désormais sous chaque option (voir .mem-opt-d dans le
@@ -684,11 +698,44 @@ async function clearCrawlKey(){
   renderInternet(await jpost('/api/internet',{key:''}));
   toast(t('settings.internet.key_removed'));
 }
+// Navigateur des liens externes cliqués dans l'interface. Réglage partagé entre
+// appareils (/api/prefs) mais écrit à part de savePrefs() : celui-ci poste tout le
+// jeu connu à chaque changement de thème, et écraserait donc, sur un appareil au
+// localStorage vide, un choix fait depuis un autre appareil.
+const LINK_BROWSERS=['auto','chrome','edge','brave','chromium'];
+// Disponibilité réelle des navigateurs sur la machine : la liste propose les
+// cinq, mais seuls ceux qui sont installés doivent être choisissables. Sans ça
+// on offrait Brave à qui ne l'a pas — le choix ne cassait rien (le clic retombe
+// sur window.open) mais il mentait sur ce qui est possible ici.
+// « auto » n'est jamais grisé : il passe par le gestionnaire de l'OS, qui existe
+// toujours et couvre les navigateurs absents de cette liste.
+async function loadOpen(){
+  try{
+    const r=await jget('/api/open');
+    const sel=document.getElementById('link-browser');
+    if(!r || !r.ok || !r.available || !sel) return;
+    for(const o of sel.options){
+      o.disabled = o.value==='auto' ? false : r.available[o.value]===false;
+    }
+  }catch(e){}
+}
+function applyLinkBrowser(v){
+  const val=LINK_BROWSERS.indexOf(v)>=0 ? v : 'auto';
+  try{ localStorage.setItem('ajean-link-browser', val); }catch(e){}
+  const sel=document.getElementById('link-browser');
+  if(sel && document.activeElement!==sel) sel.value=val;
+  return val;
+}
+async function setLinkBrowser(v){
+  const val=applyLinkBrowser(v);
+  await jpost('/api/prefs',{link_browser:val});
+  toast(t('settings.link_browser_saved'));
+}
 async function loadAll(){
   // allSettled et pas all : un seul chargement en échec (accès distant coupé,
   // clé API absente…) ne doit pas empêcher la suite — et surtout pas laisser les
   // hauteurs réservées en place pour toujours.
-  await Promise.allSettled([loadStatus(),loadTelemetry(),loadCfg(),loadPresets(),loadAgent(),loadInternet(),loadComputer(),loadMCP(),loadApiKey(),loadNetwork(),loadPrefs(),loadLlamacpp(),loadMoe(),loadRemote(),loadTasks()]);
+  await Promise.allSettled([loadStatus(),loadTelemetry(),loadCfg(),loadPresets(),loadAgent(),loadInternet(),loadComputer(),loadMCP(),loadApiKey(),loadNetwork(),loadPrefs(),loadOpen(),loadLlamacpp(),loadMoe(),loadRemote(),loadTasks()]);
   releaseHeights(); // tout est en place : on rend la main et on mesure pour la prochaine fois
 }
 // Démarrer / arrêter / redémarrer le moteur. On REMONTE l'erreur si le serveur répond

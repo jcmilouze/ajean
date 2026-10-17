@@ -275,15 +275,18 @@ func recordTaskEnd(id string, start time.Time, report string, err error) {
 	if isOnce(cur.Schedule) {
 		cur.Enabled, cur.NextRun = false, 0 // passée une fois : terminée
 	}
+	run := TaskRun{At: cur.LastRun, DurMs: cur.LastDurMs}
 	if errors.Is(err, context.Canceled) {
 		// Arrêt volontaire (bouton stop) : ce n'est pas un échec. On garde la trace
 		// « interrompue » sans allumer l'indicateur rouge d'erreur.
 		cur.LastOK = true
 		cur.LastError = ""
 		cur.LastReport = "(interrompue manuellement)"
+		run.Status = "stopped"
 	} else if err != nil {
 		cur.LastOK = false
 		cur.LastError = err.Error()
+		run.Status, run.Error = "error", clipRunes(err.Error(), 500)
 	} else {
 		cur.LastOK = true
 		cur.LastError = ""
@@ -291,6 +294,8 @@ func recordTaskEnd(id string, start time.Time, report string, err error) {
 			report = report[:reportMax] + "…"
 		}
 		cur.LastReport = report
+		run.Status, run.Report = "ok", report
 	}
+	cur.History = pushTaskRun(cur.History, run)
 	_ = saveTask(cur)
 }

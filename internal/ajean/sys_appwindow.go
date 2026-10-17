@@ -85,54 +85,35 @@ func appWindowProfileDir() string {
 	return dir
 }
 
-// findChromium cherche un navigateur qui sait faire `--app`, Edge en premier
-// sous Windows (installé d'office), Chrome en premier ailleurs.
-func findChromium() string {
-	var cands []string
-	switch runtime.GOOS {
+// appWindowBrowserOrder : dans quel ordre chercher le navigateur qui hébergera
+// l'interface, par plateforme. L'ordre est significatif — c'est lui qui décide
+// la fenêtre que l'utilisateur voit.
+//
+// Ce sont les ordres historiques, repris tels quels du findChromium d'avant le
+// partage de la table : Edge d'abord sous Windows (installé d'office), Chrome
+// d'abord sur macOS, et sous Linux l'ordre d'origine de la liste de commandes
+// (Chrome, puis Chromium, puis Edge). Ne pas les « uniformiser » : changer cet
+// ordre déplace la fenêtre AJEAN d'un navigateur à l'autre. Le réglage
+// `link_browser` ne passe PAS par ici — il ne concerne que les liens cliqués.
+func appWindowBrowserOrder(goos string) []string {
+	switch goos {
 	case "windows":
-		var roots []string
-		for _, e := range []string{"ProgramFiles(x86)", "ProgramFiles", "LOCALAPPDATA"} {
-			if v := os.Getenv(e); v != "" {
-				roots = append(roots, v)
-			}
-		}
-		for _, rel := range []string{
-			`Microsoft\Edge\Application\msedge.exe`,
-			`Google\Chrome\Application\chrome.exe`,
-			`BraveSoftware\Brave-Browser\Application\brave.exe`,
-			`Chromium\Application\chrome.exe`,
-		} {
-			for _, r := range roots {
-				cands = append(cands, filepath.Join(r, rel))
-			}
-		}
+		return []string{"edge", "chrome", "brave", "chromium"}
 	case "darwin":
-		for _, app := range []string{
-			"Google Chrome.app/Contents/MacOS/Google Chrome",
-			"Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-			"Brave Browser.app/Contents/MacOS/Brave Browser",
-			"Chromium.app/Contents/MacOS/Chromium",
-		} {
-			cands = append(cands, "/Applications/"+app)
-			if h, err := os.UserHomeDir(); err == nil {
-				cands = append(cands, filepath.Join(h, "Applications", app))
-			}
-		}
+		return []string{"chrome", "edge", "brave", "chromium"}
 	default:
-		for _, name := range []string{
-			"google-chrome", "google-chrome-stable", "chromium", "chromium-browser",
-			"microsoft-edge", "microsoft-edge-stable", "brave-browser",
-		} {
-			if p, err := exec.LookPath(name); err == nil {
-				return p
-			}
-		}
+		return []string{"chrome", "chromium", "edge", "brave"}
 	}
-	for _, c := range cands {
-		if fi, err := os.Stat(c); err == nil && !fi.IsDir() {
-			return c
-		}
+}
+
+// findChromium cherche un navigateur qui sait faire `--app`, Edge en premier
+// sous Windows (installé d'office), Chrome en premier ailleurs. Les emplacements
+// eux-mêmes sont dans sys_browser.go, partagés avec le choix des liens.
+func findChromium() string {
+	home, _ := os.UserHomeDir()
+	var cands []string
+	for _, n := range appWindowBrowserOrder(runtime.GOOS) {
+		cands = append(cands, browserCandidates(n, runtime.GOOS, home, os.Getenv)...)
 	}
-	return ""
+	return firstExisting(cands)
 }

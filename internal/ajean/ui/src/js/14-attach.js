@@ -576,11 +576,41 @@ renderAttach();
 // AJEAN (--app, sans barre ni bouton retour), un lien ouvert sur place remplaçait
 // l'app et on restait bloqué sur la page. Délégation globale : couvre les réponses
 // de l'IA comme le reste de l'interface, y compris le contenu rendu plus tard.
+//
+// Sur la machine AJEAN elle-même, le clic passe par le serveur : un window.open
+// hérite du moteur de la fenêtre (Edge sous Windows), alors que le réglage peut
+// demander Chrome. Ailleurs — téléphone via ajean.link, autre appareil du réseau —
+// window.open reste la bonne réponse : le lien doit s'ouvrir SUR L'APPAREIL, pas
+// sur la machine qui héberge AJEAN.
+function ajeanLocalUI(){
+  const h=location.hostname;
+  return h==='localhost' || h==='127.0.0.1' || h==='::1' || h==='[::1]';
+}
+async function openExternalLink(href){
+  if(ajeanLocalUI()){
+    try{
+      // Délai court et impératif : le repli window.open ci-dessous s'exécute APRÈS
+      // cet await, et l'autorisation d'ouvrir une fenêtre liée au clic (~5 s) peut
+      // avoir expiré — le lien serait alors avalé, sans rien à l'écran. jfetch
+      // imposerait sinon ses 30 s (04-api.js).
+      const ac=new AbortController(), timer=setTimeout(()=>ac.abort(),2000);
+      const r=await jfetch('/api/open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:href}),signal:ac.signal});
+      clearTimeout(timer);
+      const j=await r.json();
+      if(j && j.ok) return;
+      if(j && j.error) toast(j.error);
+    }catch(_){}
+  }
+  // Repli inconditionnel : un lien ne doit jamais devenir mort.
+  window.open(href, '_blank', 'noopener');
+}
 document.addEventListener('click', (e)=>{
   if(e.defaultPrevented || e.button!==0) return;
   const a=e.target.closest && e.target.closest('a[href]'); if(!a) return;
   let u; try{ u=new URL(a.getAttribute('href'), location.href); }catch(_){ return; }
   if(!/^https?:$/.test(u.protocol) || u.origin===location.origin) return;
   e.preventDefault();
-  window.open(u.href, '_blank', 'noopener');
+  // Les modificateurs (Ctrl/Maj) restent interceptés : les laisser passer
+  // ouvrirait le lien dans la fenêtre Edge, soit exactement le défaut réparé ici.
+  openExternalLink(u.href);
 }, true);

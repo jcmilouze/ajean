@@ -103,6 +103,8 @@ func newWebMux() *http.ServeMux {
 		// projet actif soient corrects dès le premier accès.
 		ensureDefaultProject()
 		LoadConversation()
+		// Sommeil de Jean : reprogrammé après un redémarrage (#154).
+		jeanConsolidateArmAtStart()
 	})
 	// Pré-chauffe les serveurs MCP en tâche de fond : sinon le handshake (plusieurs
 	// secondes pour un serveur lancé via npx) est payé par le premier message.
@@ -141,6 +143,10 @@ func newWebMux() *http.ServeMux {
 	// Pages publiques : le HTML et le JS ne contiennent aucun secret. Toute la
 	// donnée et toutes les actions passent par /api/* qui, lui, exige la clé.
 	mux.HandleFunc("/", handleIndex)
+	// API Anthropic (Claude Code sur le réseau local) : clé API de la machine
+	// exigée, traduction vers le preset actif (anthropic_api.go).
+	mux.Handle("/v1/messages", anthropicHandler())
+	mux.Handle("/v1/messages/count_tokens", anthropicHandler())
 	mux.HandleFunc("/marked.min.js", func(w http.ResponseWriter, r *http.Request) {
 		b, _ := uiFS.ReadFile("ui/marked.min.js")
 		w.Header().Set("Content-Type", "application/javascript")
@@ -176,6 +182,7 @@ func newWebMux() *http.ServeMux {
 	// api enregistre une route /api/* protégée par la clé de pilotage (web_auth.go).
 	api := func(path string, h http.HandlerFunc) { mux.HandleFunc(path, requireWebAuth(h)) }
 	api("/api/ping", handlePing)
+	registerAppRoutes(api) // apps créées par l'IA (apps_web.go)
 	api("/api/status", handleStatus)
 	api("/api/service/log", handleServiceLog) // journal du service pour diagnostiquer un modèle qui ne charge pas
 	api("/api/vram", handleVram)
@@ -252,6 +259,7 @@ func newWebMux() *http.ServeMux {
 	api("/api/mcp/timeouts/save", handleMCPTimeoutsSave)
 	api("/api/memory", handleMemoryMode)
 	api("/api/network", handleNetwork) // écoute LAN du moteur + pare-feu (Windows)
+	api("/api/open", handleOpenURL)    // ouvre un lien externe dans le navigateur choisi (la fenêtre AJEAN ne bouge pas)
 	api("/api/prefs", handleWebPrefs)
 	api("/api/sysprompt", handleSysPrompt)
 	// Alias rétro-compat : l'ancien portail ajean.link (dépôt ajean-relay) pilote
@@ -401,6 +409,36 @@ func killPid(pid int, force bool) {
 	_ = exec.Command("kill", sig, strconv.Itoa(pid)).Run()
 }
 
+// pidFromNetstat : le PID à l'écoute sur ce port, d'après une sortie de
+// `netstat -ano -p tcp`. Fonction pure, donc vérifiable avec de la sortie
+// étrangère sur un runner anglais.
+//
+// L'ÉTAT N'EST PAS LU : Windows le traduit (« LISTENING », « ABHÖREN »,
+// « ÉCOUTE »…). S'y fier rendait la fonction muette sur toute machine non
+// anglophone — mesuré le 2026-10-16 sur un poste en allemand, où elle renvoyait
+// 0 alors que le port était occupé, et où resolvePortConflict annonçait donc
+// « le process n'a pas pu être identifié ».
+//
+// Une socket en écoute se reconnaît sans la langue : son adresse DISTANTE est
+// nulle (0.0.0.0:0 ou [::]:0). Une connexion établie porte toujours, elle, un
+// vrai port distant.
+func pidFromNetstat(out string, port int) int {
+	suffix := ":" + strconv.Itoa(port)
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Fields(line)
+		if len(f) < 5 || f[0] != "TCP" {
+			continue
+		}
+		if !strings.HasSuffix(f[1], suffix) || !strings.HasSuffix(f[2], ":0") {
+			continue
+		}
+		if pid, err := strconv.Atoi(f[4]); err == nil && pid > 0 {
+			return pid
+		}
+	}
+	return 0
+}
+
 // pidOnPort returns the PID and command name of the process listening on the
 // given TCP port, via `ss` (Linux) with an `lsof` fallback, or `netstat -ano`
 // on Windows. Returns 0 if none is found or if the tools can't see it (e.g.
@@ -412,14 +450,8 @@ func pidOnPort(port int) (int, string) {
 		if err != nil {
 			return 0, ""
 		}
-		suffix := ":" + strconv.Itoa(port)
-		for _, line := range strings.Split(string(out), "\n") {
-			f := strings.Fields(line)
-			if len(f) >= 5 && f[0] == "TCP" && strings.HasSuffix(f[1], suffix) && f[3] == "LISTENING" {
-				if pid, err := strconv.Atoi(f[4]); err == nil && pid > 0 {
-					return pid, processName(pid)
-				}
-			}
+		if pid := pidFromNetstat(string(out), port); pid > 0 {
+			return pid, processName(pid)
 		}
 		return 0, ""
 	}

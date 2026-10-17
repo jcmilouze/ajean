@@ -1,47 +1,32 @@
-Nouveau moteur MoE pour Qwen3.8 Flash Next, plus rapide en génération comme en lecture des messages courts.
+Historique des réponses des tâches, choix du navigateur des liens, nouveaux réglages du compactage et du moteur MoE, et de nombreuses corrections.
 
-## Moteur AJEAN MoE 1.1
+## Nouveautés
 
-Le moteur optimisé de Qwen3.8 Flash Next passe en version 1.1. Mesures sur la machine de test (RTX 5060 Ti 16 Go + RTX 3070 8 Go, 46 Go de RAM, Swift 1.5 IQ3_XXS) :
-
-- **Génération** : environ 70 à 76 jetons par seconde, contre 62 à 63 avec la 1.0.
-- **Messages courts** : avec une deuxième carte, ses experts sont désormais calculés par elle pendant la lecture du prompt, au lieu d'être recopiés vers la carte principale par son lien PCIe. Un ajout de 100 jetons dans une conversation passe de 1,2 s à 0,85 s avant le premier mot, un ajout de 200 jetons de 2,0 s à 1,1 s.
-- **Longs prompts** : environ 1 000 jetons par seconde à partir de 10 000 jetons, sans changement.
-- **Experts gardés par la deuxième carte** : environ 230 de plus, en réduisant sa réserve de mémoire libre (l'encodeur d'images y tourne toujours).
-
-La mise à jour est automatique : au premier lancement d'un modèle installé avec la 1.0, le moteur 1.1 est téléchargé (environ 340 Mo) et la configuration reprise. Les modèles déjà téléchargés servent tels quels. En cas d'échec, la 1.0 continue de tourner.
-
-À savoir :
-
-- Le moteur saute désormais, pendant la génération, certains experts de faible poids absents de la carte. Les réponses peuvent donc différer très légèrement de celles de la 1.0, pour un gain de vitesse de 10 à 20 %.
-- En mode « experts de la deuxième carte hors RAM », le contexte est plafonné à 131 072 jetons : cette version demande environ 1 Go de RAM de plus, et au-delà la mémoire ne suffisait plus sur une machine de 46 Go. Le calcul de la RAM nécessaire avant installation a été ajusté en conséquence.
-- Le raccourci du niveau de réflexion est toujours proposé avec ce moteur, et le niveau choisi est gardé dans le preset au lieu de revenir au défaut à chaque changement de modèle.
-
-## Téléchargements
-
-- **Pause et reprise** : un téléchargement de modèle peut être mis en pause puis repris là où il s'était arrêté. Aucune connexion ne reste ouverte pendant la pause.
-
-## Jean
-
-- **Consolidation la nuit seulement** : le rangement de la mémoire de Jean ne démarre plus qu'entre 3 h et 5 h (heure de l'utilisateur). En journée, il occupait les cartes et faisait croire à une utilisation inexpliquée.
-
-## Cloud (Modal)
-
-- **Modèle de brouillon et budget de sortie** : un preset Modal peut utiliser un modèle de brouillon GGUF pour le décodage spéculatif, et fixer un budget de jetons en sortie. Les presets existants ne sont pas redéployés.
-- **URL de déploiement coupée** : une URL renvoyée sur deux lignes par Modal n'empêche plus la connexion.
-
-## Mac
-
-- **Panneau Appareil sur Apple Silicon** : la mémoire unifiée est affichée comme mémoire GPU, et une température inconnue n'est plus montrée.
+- **Historique des tâches** : chaque tâche garde ses 20 derniers passages (date, durée, issue et réponse complète). Ils s'affichent sous le dernier résultat, et chaque passage se déplie pour relire sa réponse.
+- **Navigateur des liens** (Paramètres, Général) : sous Windows, un lien cliqué s'ouvrait toujours dans Edge, même avec Chrome comme navigateur par défaut. Par défaut, les liens suivent désormais le navigateur du système ; Chrome, Edge, Brave ou Chromium peuvent aussi être choisis. La fenêtre d'AJEAN ne change pas, et depuis un téléphone le lien s'ouvre toujours sur l'appareil. Contribution de oh-codes.
+- **Plafond du compactage** : un réglage « compacter au plus tard à » (16K à 128K) sous l'interrupteur du compactage. Avec une très grande fenêtre de contexte, le seuil de 75 % n'était presque jamais atteint et les longues conversations devenaient lentes. Par défaut, rien ne change.
+- **VRAM laissée à l'écran** (moteur MoE) : quand la carte principale gère aussi l'affichage, une réserve de 0,5 à 4 Go peut lui être laissée depuis les réglages du modèle installé. En mode carte d'aide, la réserve de l'installeur était jusqu'ici retirée sans possibilité d'en remettre une.
 
 ## Corrections
 
-- **Compactage** : les archives de rappel sont écrites en une seule fois, et le compactage se fait sans rappel au lieu d'échouer si la base est indisponible.
+- **Interface redirigée vers une page externe** : une réponse ou une page lue contenant certaines balises HTML pouvait faire quitter l'interface dès son affichage (par exemple vers une page de connexion Microsoft). Seules les balises du markdown sont désormais interprétées, le reste s'affiche en texte.
+- **Consolidation de Jean après un redémarrage** : la consolidation de nuit n'était programmée qu'après un échange avec Jean. Une machine redémarrée sans lui parler ne consolidait jamais. Elle est maintenant programmée dès le démarrage quand la mémoire a changé, avec les outils de Jean.
+- **Jauge de contexte du moteur MoE** : en mode carte d'aide, la jauge affichait le contexte du preset (par exemple 168K) alors que le moteur s'arrête à 131K. La jauge et le compactage suivent maintenant la limite réelle.
+- **Port 8090 occupé par un autre logiciel** : AJEAN ouvrait la page de ce logiciel à sa place et n'affichait pas son icône. Il vérifie maintenant que c'est bien AJEAN qui répond, et nomme sinon le programme qui tient le port. Le programme est aussi retrouvé sur un Windows non anglophone. Contribution de oh-codes.
+- **Écritures longues en direct** : le corps d'une grosse écriture était relu en entier à chaque morceau reçu, ce qui ralentissait l'affichage en direct. Contribution de youtsuhodev.
+- **Bulles d'aide** : une bulle « ? » ouverte d'un clic ne se refermait plus. Un second clic, un clic ailleurs ou Échap la referment.
+- **Nouvelle app** : depuis le mode Rapide ou Modèle de base, où l'IA ne peut pas créer d'app, le bouton passe en mode Projet.
+- **Moteur MoE en partage des couches** : la taille de lecture des prompts n'est plus forcée dans ce mode, où elle était défavorable.
 
-## Non testé
+## Interface
 
-- L'installation à neuf du moteur MoE 1.1 n'a pas été testée de bout en bout : seule la mise à jour depuis la 1.0 l'a été.
+- Les informations de configuration du moteur MoE n'affichent plus la vision, déjà signalée par l'icône du preset.
+- L'offre AJEAN LINK ne mentionne plus le support par chat, qui a pris fin.
 
 ## Mise à jour
 
-    ajean update
+```
+ajean update
+```
+
+Non testé à ce jour : le choix du navigateur des liens sous Linux et macOS (testé par tests automatiques seulement), et la réserve de VRAM sur une machine dont la carte principale gère l'écran.

@@ -264,7 +264,7 @@ func toolRecall(args map[string]any) string {
 	}
 	blk, ok := recallGet(id)
 	if !ok {
-		return fmt.Sprintf("[erreur] bloc %q introuvable — vérifie l'id, ou utilise recall_search pour le retrouver par mots-clés", id)
+		return fmt.Sprintf("[erreur] bloc %q introuvable — vérifie l'id, ou utilise recall(search) pour le retrouver par mots-clés", id)
 	}
 	return fmt.Sprintf("[%s — %s, rappelé verbatim]\n%s", blk.ID, blk.Label, blk.Content)
 }

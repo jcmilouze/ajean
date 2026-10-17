@@ -125,7 +125,7 @@ func jeanReflectNoteTurn(caps Caps, temp float64, userText string, violations []
 	// l'erreur. On le compte et la révision doit la réparer, elle précisément.
 	if k != jeanCorrNone && len(jeanReflect.lastFiches) > 0 {
 		jeanNoteFicheCorrected(jeanReflect.lastFiches)
-		jeanReflect.corrMsg = append(jeanReflect.corrMsg, "[harness check] This correction came right after you followed fiche(s) "+strings.Join(jeanReflect.lastFiches, ", ")+": fix that fiche (jean_patch) so that following it gives what the user wanted.")
+		jeanReflect.corrMsg = append(jeanReflect.corrMsg, "[harness check] This correction came right after you followed fiche(s) "+strings.Join(jeanReflect.lastFiches, ", ")+": fix that fiche (jean(patch)) so that following it gives what the user wanted.")
 	}
 	jeanReflect.lastFiches = fichesRead
 	jeanReflect.work = max(jeanReflect.work, toolCalls)
@@ -339,10 +339,10 @@ func jeanSilentRun(ctx context.Context, cancel context.CancelFunc, msgs []Messag
 func jeanReflectPrompt(n, corr int, corrMsg []string) string {
 	return jeanCorrectionBrief(corr, corrMsg) + fmt.Sprintf(`[MEMORY REVIEW. Silent: the user will not see this message nor your answer.]
 Look back at the last %d exchange(s) of this conversation and save only what will still matter in a month:
-1. A lasting fact about the user that is new or changed (person, date, preference, habit, project) and not already in your profile → jean_remember.
-2. A lesson: the user corrected you, a method failed before the one that worked, or you hit a quirk worth knowing → jean_lesson (with fiche=<name> if it is about a fiche).
-3. A procedure: steps you worked out, or how the user wants a recurring task done (where, format, rules) → jean_save a fiche (steps + pitfalls), not a lesson. A fiche that turned out wrong or incomplete → jean_patch it.
-4. A list the user keeps updating (todo, shopping list…) that lives in journal notes or nowhere durable → put its CURRENT state in one fiche (jean_save), to be updated in place from now on.
+1. A lasting fact about the user that is new or changed (person, date, preference, habit, project) and not already in your profile → jean(remember).
+2. A lesson: the user corrected you, a method failed before the one that worked, or you hit a quirk worth knowing → jean(lesson) (with fiche=<name> if it is about a fiche).
+3. A procedure: steps you worked out, or how the user wants a recurring task done (where, format, rules) → jean(save) a fiche (steps + pitfalls), not a lesson. A fiche that turned out wrong or incomplete → jean(patch) it.
+4. A list the user keeps updating (todo, shopping list…) that lives in journal notes or nowhere durable → put its CURRENT state in one fiche (jean(save)), to be updated in place from now on.
 Write only what was actually said or shown, never a guess or a generalization (a sister you will visit on Saturday is not "visits her often").
 Never save your own interpretation as a fact (a possible typo is not a nickname). When the user and a tool result disagree, note both as they are, never a rule that ignores the error.
 A pitfall goes in the fiche of the task it is about; skip it if a fiche or lesson already says it. No password, key or token in the profile: those go in the service's fiche.
@@ -390,9 +390,9 @@ func jeanReviewTask(parent context.Context, base, extra []Message, report string
 
 const jeanTaskReviewPrompt = `[TASK REVIEW. Silent: nobody reads this.]
 Look at the task you just ran. Did something fail before you found what works, or did you discover a better or required way to do it?
-- If this task follows a fiche → fix it with jean_patch, or add the pitfall with jean_lesson fiche=<name>.
-- A reusable procedure you had to work out → jean_save a fiche (steps + pitfalls).
-- A general rule worth remembering → jean_lesson.
+- If this task follows a fiche → fix it with jean(patch), or add the pitfall with jean(lesson) fiche=<name>.
+- A reusable procedure you had to work out → jean(save) a fiche (steps + pitfalls).
+- A general rule worth remembering → jean(lesson).
 Only what will make the next run faster or safer. Nothing to learn is the usual case. When done, reply with just: OK`
 
 // jeanWorkCalls : à partir de ce nombre d'appels d'outils dans un tour, Jean a
@@ -405,7 +405,7 @@ func jeanWorkBrief(calls int) string {
 		return ""
 	}
 	return fmt.Sprintf("[PRIORITY] One of these requests took you %d tool calls: you had to find your way. "+
-		"If the user may ask it again (or something similar), save the DIRECT path as a fiche now (jean_save, or jean_patch the existing fiche): "+
+		"If the user may ask it again (or something similar), save the DIRECT path as a fiche now (jean(save), or jean(patch) the existing fiche): "+
 		"the exact steps, commands, URLs, file names and values that worked, in order, without the dead ends, plus a pitfalls section for what failed. Never store results that change (views, prices, counts): only how to get them. "+
 		"Name it after the request (e.g. youtube-stats), with a 'when' line matching how the user asks. "+
 		"If a script did the job, it must live in your SCRIPTS folder (durable; the workspace can be wiped): if it is only in the workspace or was a one-off command, copy the exact version that worked (from this conversation, unchanged) into a NEW file of your scripts folder (creating is allowed there during this review; changing an existing script is not, you cannot test it here), then give its exact command in the fiche. If an existing script needs a fix, write that fix in the fiche instead: you will apply and test it next time. "+

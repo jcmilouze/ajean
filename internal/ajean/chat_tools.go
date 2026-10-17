@@ -69,23 +69,23 @@ func baseSystemPrompt(caps Caps) string {
 		// Mode INJECTÉ : l'index MEMORY.md est déjà en tête de contexte (mem_index.go),
 		// donc mem_search est optionnel — l'IA lit directement la bonne page.
 		b.WriteString("\nManaging your memory is part of the job, not optional:\n")
-		b.WriteString("- Save anything worth keeping (a preference, fact, decision, how-to) with mem_add, or mem_edit to update a page — on your own, without being asked.\n")
-		b.WriteString("- The project's memory index (page list) is already in your context. When a page looks relevant, mem_read it directly for its content — no search needed first.\n")
-		b.WriteString("- Use mem_search only to find something by content the index doesn't cover; it's optional, not a required first step.\n")
-		b.WriteString("- Memory is per-project (the active one is named in the project context), other projects isolated. Keep it tidy: small focused pages (one topic each), mem_edit rather than duplicate, mem_delete what's obsolete.\n")
+		b.WriteString("- Save anything worth keeping (a preference, fact, decision, how-to) with memory(add), or memory(edit) to update a page — on your own, without being asked.\n")
+		b.WriteString("- The project's memory index (page list) is already in your context. When a page looks relevant, memory(read) it directly for its content — no search needed first.\n")
+		b.WriteString("- Use memory(search) only to find something by content the index doesn't cover; it's optional, not a required first step.\n")
+		b.WriteString("- Memory is per-project (the active one is named in the project context), other projects isolated. Keep it tidy: small focused pages (one topic each), memory(edit) rather than duplicate, memory(delete) what's obsolete.\n")
 		b.WriteString("- Dated data that piles up (counters, readings, a running follow-up) goes in the `tracker` tool, not a note — a note would bloat.\n")
-		b.WriteString("- MEMORY.md (this project's index) is maintained automatically: creating/deleting a page adds/removes its line. Don't manage lines yourself; mem_edit it only to add a short hook to an entry.\n")
+		b.WriteString("- MEMORY.md (this project's index) is maintained automatically: creating/deleting a page adds/removes its line. Don't manage lines yourself; memory(edit) it only to add a short hook to an entry.\n")
 	case MemSearchFirst:
 		// Mode RECHERCHE : rien n'est injecté (ni index ni trackers), le prompt reste
 		// léger et le modèle démarre plus vite. En contrepartie il DOIT chercher lui-même
 		// avant d'agir — sinon il ne saura pas ce que la mémoire contient.
 		b.WriteString("\nManaging your memory is part of the job, not optional:\n")
-		b.WriteString("- Before any task or answer, call mem_search first, then mem_read the best page — even for trivial-seeming questions or ones with new specifics (a name, a value): your saved method still applies, only the parameter changes. Nothing about your memory is preloaded here, so a search is the only way to know what you already know.\n")
-		b.WriteString("- Save anything worth keeping (a preference, fact, decision, how-to) with mem_add, or mem_edit to update a page — on your own, without being asked.\n")
-		b.WriteString("- Memory is per-project (the active one is named in the project context), other projects isolated. Keep it tidy: small focused pages (one topic each), mem_edit rather than duplicate, mem_delete what's obsolete.\n")
+		b.WriteString("- Before any task or answer, call memory(search) first, then memory(read) the best page — even for trivial-seeming questions or ones with new specifics (a name, a value): your saved method still applies, only the parameter changes. Nothing about your memory is preloaded here, so a search is the only way to know what you already know.\n")
+		b.WriteString("- Save anything worth keeping (a preference, fact, decision, how-to) with memory(add), or memory(edit) to update a page — on your own, without being asked.\n")
+		b.WriteString("- Memory is per-project (the active one is named in the project context), other projects isolated. Keep it tidy: small focused pages (one topic each), memory(edit) rather than duplicate, memory(delete) what's obsolete.\n")
 		b.WriteString("- Dated data that piles up (counters, readings, a running follow-up) goes in the `tracker` tool, not a note — a note would bloat.\n")
 	case MemOnDemand:
-		b.WriteString("\nMemory is ON-DEMAND: you have the mem_* tools but do NOT read or write memory on your own. Call mem_search/mem_read only when the user explicitly asks you to recall or look something up, and mem_add/mem_edit only when the user explicitly asks you to remember something. Otherwise leave memory untouched and answer directly.\n")
+		b.WriteString("\nMemory is ON-DEMAND: you have the memory tool but do NOT read or write memory on your own. Call memory(search)/memory(read) only when the user explicitly asks you to recall or look something up, and memory(add)/memory(edit) only when the user explicitly asks you to remember something. Otherwise leave memory untouched and answer directly.\n")
 	}
 	if caps.Jean {
 		b.WriteString(jeanPromptSection())
@@ -102,17 +102,17 @@ func baseSystemPrompt(caps Caps) string {
 		// Auto-planification : le modèle a les outils task_* (schémas joints). On ne
 		// répète pas leur usage, juste QUE la capacité existe et QUAND s'en servir —
 		// sinon il ne penserait jamais à se planifier quoi que ce soit.
-		b.WriteString("You can schedule work for yourself with task_create (reminders, watches, cleanups): only for something later or recurring, not a one-off you can do now.\n")
+		b.WriteString("You can schedule work for yourself with task(create) (reminders, watches, cleanups): only for something later or recurring, not a one-off you can do now.\n")
 		// La consigne « garder les scripts dans le dossier scripts, pas le workspace »
 		// vit dans le briefing machine ; ici on n'ajoute que ce qu'elle ne dit pas —
 		// qu'un tel script peut tourner en tâche SANS modèle.
-		b.WriteString("A script from your scripts folder can run that way on its own, with no model (task_create's 'script').\n")
+		b.WriteString("A script from your scripts folder can run that way on its own, with no model (task(create)'s 'script').\n")
 	}
 	if caps.Internet {
 		// Le catalogue des outils web est parti dans leurs schémas ; ne reste ici
 		// que l'ordre d'appel, que les schémas pris isolément ne disent pas.
 		year := time.Now().Format("2006")
-		b.WriteString("\nWeb: web_open a page, then web_read/web_grep it. Your knowledge is limited and stale: like anyone unsure, check on the web before answering whenever you are not sure of a fact (name, place, date, version, how something works), and always for anything recent or current; then report what you read. Told you're wrong? Search, don't guess again. It is " + year + ": in a query use only that year (never " + prevYear(year) + "), or none.\n")
+		b.WriteString("\nWeb: web(open) a page, then web(read)/web(grep) it. Your knowledge is limited and stale: like anyone unsure, check on the web before answering whenever you are not sure of a fact (name, place, date, version, how something works), and always for anything recent or current; then report what you read. Told you're wrong? Search, don't guess again. It is " + year + ": in a query use only that year (never " + prevYear(year) + "), or none.\n")
 	}
 	if caps.Agent && caps.ComputerUse {
 		b.WriteString(cuPromptLine())
@@ -172,11 +172,11 @@ func machineSystemPrompt(caps Caps) string {
 		// dossier memory, on lui dit explicitement de ne pas le faire (bash/write/edit
 		// le refuseront de toute façon).
 		// En mode Jean, sa mémoire passe par les outils jean_* (pas de mem_* fournis).
-		memTools := "mem_*"
+		memTools := "memory"
 		if caps.Jean {
-			memTools = "jean_*"
+			memTools = "jean"
 		}
-		b.WriteString(" The memory folder is off-limits to bash, write and edit: use the " + memTools + " tools.")
+		b.WriteString(" The memory folder is off-limits to bash and file: use the " + memTools + " tool.")
 	}
 	return b.String()
 }

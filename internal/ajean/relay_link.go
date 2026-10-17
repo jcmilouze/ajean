@@ -524,6 +524,7 @@ func newLinkHandler(mux *http.ServeMux) http.Handler {
 	//   - /api/e2e/req  : proxy de contrôle chiffré (presets, VRAM, skills, service…).
 	// Tout autre /api/* en clair est REFUSÉ via le tunnel.
 	oaiAllowed := os.Getenv("AJEAN_LINK_ALLOW_OAI") == "1"
+	ant := anthropicHandler()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p := r.URL.Path
 		if strings.HasPrefix(p, "/api/e2e/") {
@@ -554,6 +555,10 @@ func newLinkHandler(mux *http.ServeMux) http.Handler {
 			// il transiterait en clair par le relais. Désactivé par défaut.
 			if !oaiAllowed {
 				http.Error(w, "endpoint OpenAI désactivé via le relais (transiterait en clair) ; AJEAN_LINK_ALLOW_OAI=1 pour l'autoriser", http.StatusForbidden)
+				return
+			}
+			if isAnthropicPath(p) {
+				ant.ServeHTTP(w, r)
 				return
 			}
 			lp.ServeHTTP(w, r)

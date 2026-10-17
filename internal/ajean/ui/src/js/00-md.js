@@ -17,8 +17,49 @@ function fixMd(s){
 function md(src){
   if(!src) return '';
   const m = mathExtract(fixMd(src));
-  const html = marked.parse(m.text);
+  const html = mdSanitize(marked.parse(m.text));
   return m.list.length ? html.replace(/(\d+)/g, (_, i)=>mathHtml(m.list[+i])) : html;
+}
+
+// --- Nettoyage du HTML rendu ------------------------------------------------
+// marked laisse passer le HTML brut du texte. Or ce texte vient du modèle, d'une
+// page web lue ou d'un fichier : une balise <meta http-equiv="refresh"> recopiée
+// d'une page de connexion faisait quitter l'interface dès l'affichage, et un
+// <img onerror=…> y aurait exécuté du code. Seules les balises que produit le
+// markdown sont gardées (les autres deviennent du texte), sans attribut
+// d'événement ni de style, et les liens ne gardent que des adresses sûres. Les
+// formules (KaTeX) sont insérées APRÈS ce nettoyage, sur un repère.
+const MD_TAGS = new Set(['P','BR','HR','H1','H2','H3','H4','H5','H6','UL','OL','LI','BLOCKQUOTE','PRE','CODE','EM','STRONG','B','I','U','S','DEL','INS','MARK','SMALL','SUB','SUP','KBD','A','IMG','TABLE','THEAD','TBODY','TFOOT','TR','TH','TD','SPAN','DIV','DETAILS','SUMMARY','INPUT','DL','DT','DD','ABBR','Q','CITE']);
+const MD_ATTRS = new Set(['href','src','alt','title','class','colspan','rowspan','align','start','type','checked','disabled','open','width','height','lang']);
+function mdSafeURL(u, img){
+  const s = String(u || '').replace(/[\u0000- ]+/g, '');
+  const sch = /^([a-z][a-z0-9+.-]*):/i.exec(s);
+  if(!sch) return true;                                   // relative, #ancre, chemin du workspace
+  const p = sch[1].toLowerCase();
+  if(p === 'http' || p === 'https' || p === 'mailto') return true;
+  return img && p === 'data' && /^data:image\/(png|jpe?g|gif|webp)[;,]/i.test(s);
+}
+function mdSanitize(html){
+  if(!/</.test(html)) return html;
+  const t = document.createElement('template');
+  t.innerHTML = html;
+  const walk = (node)=>{
+    for(const el of Array.from(node.children)){
+      if(!MD_TAGS.has(el.tagName) || (el.tagName === 'INPUT' && el.getAttribute('type') !== 'checkbox')){
+        // Balise inconnue : son texte reste lisible, la balise ne vit pas.
+        el.replaceWith(document.createTextNode(el.outerHTML));
+        continue;
+      }
+      for(const a of Array.from(el.attributes)){
+        const n = a.name.toLowerCase();
+        if(!MD_ATTRS.has(n) || ((n === 'href' || n === 'src') && !mdSafeURL(a.value, el.tagName === 'IMG'))) el.removeAttribute(a.name);
+      }
+      if(el.tagName === 'INPUT') el.setAttribute('disabled', '');
+      walk(el);
+    }
+  };
+  walk(t.content);
+  return t.innerHTML;
 }
 
 // --- Formules LaTeX (KaTeX) ---------------------------------------------------

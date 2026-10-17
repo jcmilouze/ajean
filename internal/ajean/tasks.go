@@ -47,8 +47,32 @@ type Task struct {
 	LastOK     bool   `json:"last_ok"`
 	LastError  string `json:"last_error"`
 	LastReport string `json:"last_report"` // dernier texte final de l'IA (compte-rendu court)
+	// History : les derniers passages, le plus récent d'abord (taskHistoryMax). Le
+	// dernier seul ne permettait pas de juger une tâche qui tourne souvent (#143).
+	History []TaskRun `json:"history,omitempty"`
 
 	Running bool `json:"-"` // transitoire : une exécution est en cours
+}
+
+// TaskRun : un passage d'une tâche, gardé dans son historique.
+type TaskRun struct {
+	At     int64  `json:"at"`     // fin du passage, epoch ms
+	DurMs  int64  `json:"dur_ms"` // durée
+	Status string `json:"status"` // "ok", "error" ou "stopped"
+	Error  string `json:"error,omitempty"`
+	Report string `json:"report,omitempty"` // compte-rendu, borné comme LastReport
+}
+
+// taskHistoryMax : passages gardés par tâche (20 × 4 Ko de compte-rendu au plus).
+const taskHistoryMax = 20
+
+// pushTaskRun ajoute un passage en tête de l'historique et le borne.
+func pushTaskRun(h []TaskRun, r TaskRun) []TaskRun {
+	h = append([]TaskRun{r}, h...)
+	if len(h) > taskHistoryMax {
+		h = h[:taskHistoryMax]
+	}
+	return h
 }
 
 // newTaskID génère un identifiant court et unique.

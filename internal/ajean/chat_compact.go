@@ -27,11 +27,8 @@ import (
 
 const (
 	// Seuil de déclenchement proactif : on compacte quand l'historique estimé
-	// dépasse ce pourcentage de la fenêtre de contexte. Réglable par COMPACT_AT
-	// (compactAtMin..compactAtMax), voir compactTriggerTokens.
-	compactTriggerDefaultPct = 75
-	compactAtMin             = 30
-	compactAtMax             = 90
+	// dépasse cette fraction de la fenêtre de contexte.
+	compactTriggerFrac = 0.75
 	// Budget de la queue : fraction de la fenêtre gardée intacte (tours récents).
 	// Plus la queue est petite, plus on compacte de torse d'un coup → le contexte
 	// retombe bas et met longtemps à re-déclencher (au lieu de compacter souvent).
@@ -71,28 +68,42 @@ func compactEnabled() bool {
 	return true
 }
 
-// compactTriggerTokens est la taille de contexte à partir de laquelle la
-// compaction proactive se déclenche : COMPACT_AT % de la fenêtre (config.env),
-// 75 % par défaut. Une valeur hors bornes est ramenée dans [30, 90] plutôt
-// qu'ignorée : qui écrit 10 veut compacter tôt. Illisible = défaut. Calcul
-// entier : 0.6×10000 en flottant n'est pas garanti de tomber pile sur 6000.
-func compactTriggerTokens() int {
-	pct := compactTriggerDefaultPct
-	if n, err := strconv.Atoi(strings.TrimSpace(ReadConfig()["COMPACT_AT"])); err == nil {
-		pct = min(max(n, compactAtMin), compactAtMax)
-	}
-	return ctxWindow() * pct / 100
-}
-
 // ctxWindow renvoie la fenêtre de contexte configurée (config.env CTX), 32768
 // par défaut — la même valeur que celle passée à llama-server au lancement.
 func ctxWindow() int {
-	if v := ReadConfig()["CTX"]; v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			return n
+	cfg := ReadConfig()
+	n := 32768
+	if v := cfg["CTX"]; v != "" {
+		if c, err := strconv.Atoi(v); err == nil && c > 0 {
+			n = c
 		}
 	}
-	return 32768
+	// Le moteur MoE en mode hors RAM plafonne lui-même le contexte (moeDropMaxCtx) :
+	// lire le CTX brut faisait afficher 168K et compacter trop tard, alors que le
+	// moteur refusait tout prompt au-delà de 131K.
+	return moeEffectiveCtx(cfg, n)
+}
+
+// compactMaxTokens : plafond absolu du seuil de compactage (clé appareil
+// COMPACT_MAX, en jetons), 0 = aucun. Sans plafond le seuil suit la fenêtre
+// annoncée : à 1M de contexte il était à 750 000 et la compaction ne se
+// déclenchait jamais, alors qu'un petit modèle décroche bien avant (#142).
+func compactMaxTokens() int {
+	n, err := strconv.Atoi(strings.TrimSpace(ReadConfig()["COMPACT_MAX"]))
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return max(n, 8192) // en dessous, on compacterait à chaque message
+}
+
+// compactThreshold : nombre de jetons à partir duquel on compacte, 75 % de la
+// fenêtre, ramené au plafond COMPACT_MAX s'il est plus bas.
+func compactThreshold() int {
+	th := int(float64(ctxWindow()) * compactTriggerFrac)
+	if m := compactMaxTokens(); m > 0 && m < th {
+		th = m
+	}
+	return th
 }
 
 // compactSummaryBudget renvoie le budget en tokens du résumé, adapté à la
@@ -127,10 +138,10 @@ func compactSummaryBudget() int {
 // Ce marqueur ne rend pas l'image rappelable (recall reste du texte pur), mais
 // il rend sa PERTE visible : le résumeur peut la mentionner dans sa prose, et
 // le modèle sait qu'il doit rappeler see_image plutôt que de deviner.
-const imageLostMarker = " [image — not kept past this point in the conversation once summarized; call see_image on the same file again if you still need to see it]"
+const imageLostMarker = " [image — not kept past this point in the conversation once summarized; call see(image) on the same file again if you still need to see it]"
 
 // videoLostMarker : équivalent pour une partie `input_video` (voir imageLostMarker).
-const videoLostMarker = " [video — not kept past this point in the conversation once summarized; call see_video on the same file again if you still need to see it]"
+const videoLostMarker = " [video — not kept past this point in the conversation once summarized; call see(video) on the same file again if you still need to see it]"
 
 // msgText extrait le texte d'un message (Content est `any`, en pratique string
 // ou nil quand l'assistant n'a que des tool_calls). Un message multimodal
@@ -226,7 +237,7 @@ func compactWouldTrigger(msgs []Message, knownTokens int) bool {
 	if used <= 0 {
 		used = estimateTokens(msgs)
 	}
-	return used >= compactTriggerTokens()
+	return used >= compactThreshold()
 }
 
 // compactLogOut : destination de logCompact. Le chat terminal la coupe, sa
@@ -240,7 +251,7 @@ var compactLogOut io.Writer = os.Stderr
 // été atteint ou si la réduction a été refusée.
 func logCompact(phase string, used int, before, after []Message, changed bool) {
 	fmt.Fprintf(compactLogOut, "[compact] %s ctx=%d seuil=%d/%d est_avant=%d est_apres=%d msgs=%d→%d changé=%v\n",
-		phase, used, compactTriggerTokens(), ctxWindow(),
+		phase, used, compactThreshold(), ctxWindow(),
 		estimateTokens(before), estimateTokens(after), len(before), len(after), changed)
 }
 
@@ -583,7 +594,7 @@ func torsoToolNames(torso []Message) map[string]string {
 	for _, m := range torso {
 		for _, tc := range m.ToolCalls {
 			if tc.ID != "" {
-				names[tc.ID] = tc.Function.Name
+				names[tc.ID], _ = toolCallLegacy(tc)
 			}
 		}
 	}
@@ -606,7 +617,7 @@ func compactSummaryUserMsg(summary string, index []recallEntry) string {
 	var b strings.Builder
 	b.WriteString(compactSummaryPrefix)
 	if len(index) > 0 {
-		b.WriteString(" The earlier turns of this conversation were summarized to save context, but nothing is lost: any block referenced below (or in the summary) as recall:rN can be brought back verbatim with the recall(id) tool, and recall_search(\"keywords\") finds older archived blocks not listed here. Here is the summary:\n\n")
+		b.WriteString(" The earlier turns of this conversation were summarized to save context, but nothing is lost: any block referenced below (or in the summary) as recall:rN can be brought back verbatim with the recall(id) tool, and recall(search, \"keywords\") finds older archived blocks not listed here. Here is the summary:\n\n")
 	} else {
 		b.WriteString(" The earlier turns of this conversation were summarized to save context. Here is the summary:\n\n")
 	}

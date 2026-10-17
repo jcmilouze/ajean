@@ -9,10 +9,14 @@ package ajean
 // (« Ouvrir AJEAN » / « Quitter »).
 
 import (
+	"bytes"
+	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -35,10 +39,26 @@ func cmdApp(args []string) error {
 	addr := fmt.Sprintf("0.0.0.0:%d", appPort)
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		// AJEAN tourne déjà sur ce port : on ouvre juste l'UI sur l'instance
-		// existante plutôt que d'échouer.
-		fmt.Printf("AJEAN est déjà lancé — ouverture de %s\n", url)
-		return openAppWindow(url)
+		// Le port est pris — mais par QUI ? On le demande au lieu de le
+		// supposer. Annoncer « AJEAN est déjà lancé » à propos d'un autre
+		// logiciel ouvrait sa page à sa place, et le retour anticipé privait
+		// l'utilisateur jusqu'à l'icône de la zone de notification (observé en
+		// usage réel le 2026-10-16 : un `python -m http.server` laissé par
+		// l'aperçu d'un IDE ; la fenêtre montrait un listing de dossier).
+		if ajeanAnswersOn(appPort) {
+			// Une autre instance d'AJEAN sert déjà : on ouvre sa fenêtre. Pas
+			// d'icône ici, la sienne existe déjà.
+			fmt.Printf("AJEAN est déjà lancé — ouverture de %s\n", url)
+			return openAppWindow(url)
+		}
+		qui := "un autre logiciel"
+		if pid, name := pidOnPort(appPort); pid != 0 {
+			qui = fmt.Sprintf("%s (PID %d)", name, pid)
+		}
+		fmt.Fprintln(os.Stderr, "AJEAN : port", appPort, "déjà utilisé par", qui)
+		notifyUser("AJEAN ne peut pas démarrer",
+			fmt.Sprintf("Le port %d est déjà utilisé par %s.\n\nAJEAN ne peut pas ouvrir son interface tant que ce processus tourne.\nFerme-le, puis relance AJEAN.", appPort, qui))
+		return fmt.Errorf("port %d déjà utilisé par %s", appPort, qui)
 	}
 
 	// UN SEUL process propriétaire de la conversation, comme le service ajean-ui
@@ -91,4 +111,36 @@ func waitServerReady(url string) {
 		}
 		time.Sleep(150 * time.Millisecond)
 	}
+}
+
+// ajeanAnswersOn : est-ce bien un AJEAN qui répond sur ce port ?
+//
+// On le sonde au lieu de le déduire — n'importe quel logiciel peut occuper 8090,
+// et lui ouvrir la fenêtre à sa place est pire que d'échouer franchement.
+//
+// /api/ping est le discriminant : il répond {"ok":true,"service":"ajean",…}.
+func ajeanAnswersOn(port int) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		fmt.Sprintf("http://127.0.0.1:%d/api/ping", port), nil)
+	if err != nil {
+		return false
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	// Instance protégée par une clé de pilotage : elle refuse le ping (le serveur
+	// ne garde que l'empreinte de la clé, on n'a rien à présenter), mais son refus
+	// porte la signature d'AJEAN (requireWebAuth).
+	if resp.StatusCode == http.StatusUnauthorized {
+		return strings.Contains(resp.Header.Get("WWW-Authenticate"), `realm="ajean"`)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	return err == nil && bytes.Contains(body, []byte(`"service":"ajean"`))
 }

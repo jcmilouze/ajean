@@ -140,6 +140,7 @@ const ICONS = {
   image:'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
   monitor:'<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
   plug:'<path d="M9 2v6"/><path d="M15 2v6"/><path d="M6 8h12v3a6 6 0 0 1-6 6 6 6 0 0 1-6-6z"/><path d="M12 17v5"/>',
+  app:'<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',
   wrench:'<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.8 2.8-2-2 2.8-2.8z"/>',
 };
 function iconSvg(key){
@@ -343,6 +344,7 @@ function renderToolMsg(el, tu){
     machines_list:{ico:'monitor', lbl:t('chat.tool.machines_list_lbl'),  head:t('chat.tool.machines_list_head')},
     machines_use: {ico:'monitor', lbl:t('chat.tool.machines_use_lbl'),   head:t('chat.tool.machines_use_head')},
     tracker:    {ico:'trend',     lbl:t('chat.tool.tracker_lbl'),        head:t('chat.tool.tracker_head')},
+    app:        {ico:'app',       lbl:appToolActLabel(tu.label), head:'app'},
   };
   // Outils MCP (nom mcp__<serveur>__<outil>) : en-tête = nom du serveur, libellé lisible,
   // pas le fallback générique. On extrait serveur et outil du nom namespacé.
@@ -487,6 +489,8 @@ function renderToolMsg(el, tu){
     body.appendChild(wait);
   }
   addCopyButtons(body); scrollMaybe();
+  // App créée ou modifiée : carte « Ouvrir » sous la bulle (voir 22-apps.js).
+  appCardFor(el, tu);
 }
 // Bloc d'un résultat d'outil : le pre scrolle (max-height), donc la barre d'actions
 // vit sur un bloc-parent NON scrollant, ancrée en bas à droite — elle reste au coin

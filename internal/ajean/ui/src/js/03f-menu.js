@@ -91,6 +91,35 @@ document.addEventListener('pointerdown', (e)=>{
   while(MENU && !MENU.el.contains(e.target) && !MENU.anchor.contains(e.target)) closeMenu();
 }, true);
 document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && MENU){ e.stopPropagation(); closeMenu(); } }, true);
+
+// ----- Bulles d'aide (« ? ») ------------------------------------------------
+// Chaque pastille bascule « open » dans son onclick (qui arrête la propagation),
+// d'où l'écoute en capture. Un 2e clic referme pour de bon (.shut masque aussi le
+// survol jusqu'à ce que la souris s'en aille), ouvrir une bulle ferme les autres,
+// un clic ailleurs ou Échap ferme tout.
+function closeHelps(except){
+  document.querySelectorAll('.help.open').forEach(h=>{ if(h !== except) h.classList.remove('open'); });
+}
+document.addEventListener('click', (e)=>{
+  const h = e.target.closest && e.target.closest('.help');
+  if(!h){ closeHelps(null); return; }
+  if(e.target.closest('.tip') && h.classList.contains('open')){
+    // clic DANS la bulle (lecture, lien) : elle reste ouverte malgré le onclick
+    setTimeout(()=>h.classList.add('open'), 0);
+    return;
+  }
+  closeHelps(h);
+  setTimeout(()=>{   // après le onclick de la pastille
+    const open = h.classList.contains('open');
+    h.classList.toggle('shut', !open);
+    if(!open) h.blur();
+  }, 0);
+}, true);
+document.addEventListener('mouseout', (e)=>{
+  const h = e.target.closest && e.target.closest('.help.shut');
+  if(h && !h.contains(e.relatedTarget)) h.classList.remove('shut');
+}, true);
+document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && document.querySelector('.help.open')) closeHelps(null); }, true);
 // Seul un défilement qui DÉPLACE l'ancre ferme le menu (page entière ou conteneur
 // de l'ancre). Le fil du chat défile tout seul pendant la génération : avant,
 // n'importe quel défilement refermait les menus ouverts ailleurs (issue #113).

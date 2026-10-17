@@ -508,9 +508,9 @@ async function loadCfg(){
       rows.push(row('CTX', d.ctx));
       rows.push(row('KV', d.kv+(d.kv_resident ? ' · '+k(d.kv_resident)+' VRAM' : '')));
       rows.push(row('MTP', d.spec));
-      rows.push(row('PREFILL', k(d.prefill)));
+      rows.push(row('PREFILL', d.prefill ? k(d.prefill) : 'auto'));
       rows.push(row('EXPERTS', d.drop ? 'mlock' : d.mmap ? 'mmap' : 'RAM', d.drop ? t('moe.d_drop') : d.mmap ? t('moe.d_mmap') : t('moe.d_inram')));
-      if(d.vision_gpu) rows.push(row('VISION', 'on', d.vision_gpu));
+      // la vision est déjà signalée par l'œil du preset
     }else if(c.CTX) rows.push(row('CTX', c.CTX));
     swapContent(document.getElementById('cfg'), rows.join(''));
     updateReasonBtn(c.REASONING_EFFORT || '', true);

@@ -125,7 +125,7 @@ func JeanLesson(text, fiche string) (string, error) {
 	}
 	all := append(ls, jeanLessonT{next, text})
 	if len(renderJeanLessons(all)) > jeanLessonsMaxChars {
-		return "", fmt.Errorf("leçons pleines (%d car. max). Fusionne deux leçons proches (jean_forget lecon-N puis une seule jean_lesson qui les résume) ou oublie la moins utile. Leçons :\n%s",
+		return "", fmt.Errorf("leçons pleines (%d car. max). Fusionne deux leçons proches (jean(forget) lecon-N puis une seule jean(lesson) qui les résume) ou oublie la moins utile. Leçons :\n%s",
 			jeanLessonsMaxChars, numberedLessons(ls))
 	}
 	if err := jeanWrite(jeanLessonsFile, renderJeanLessons(all)); err != nil {
@@ -187,7 +187,7 @@ func jeanLessonsBlock() string {
 	if err != nil || len(ls) == 0 {
 		return ""
 	}
-	return "\nLessons you learned (follow them; edit with jean_lesson / jean_forget lecon-N):\n" + numberedLessons(ls) + "\n"
+	return "\nLessons you learned (follow them; edit with jean(lesson) / jean(forget) lecon-N):\n" + numberedLessons(ls) + "\n"
 }
 
 // jeanFicheAddPitfall ajoute une leçon à la section « Pièges » d'une fiche.
@@ -217,7 +217,7 @@ func jeanFicheAddPitfall(name, text string) (string, error) {
 		f.Content += "\n\n" + jeanPitfallsHead + "\n- " + text
 	}
 	if n := len([]rune(f.Content)); n > jeanFicheMaxChars {
-		return "", fmt.Errorf("fiche « %s » pleine : raccourcis-la (jean_patch) avant d'ajouter un piège", name)
+		return "", fmt.Errorf("fiche « %s » pleine : raccourcis-la (jean(patch)) avant d'ajouter un piège", name)
 	}
 	if err := jeanWrite(ficheFile(name), "# "+name+"\nwhen: "+f.When+"\n\n"+strings.TrimSpace(f.Content)+"\n"); err != nil {
 		return "", err
@@ -231,7 +231,7 @@ func jeanFicheAddPitfall(name, text string) (string, error) {
 func JeanPatch(name, old, repl string) (string, error) {
 	name = normFicheName(name)
 	if old == "" {
-		return "", fmt.Errorf("'old' vide : donne le passage exact à remplacer (pour ajouter un piège : jean_lesson avec fiche)")
+		return "", fmt.Errorf("'old' vide : donne le passage exact à remplacer (pour ajouter un piège : jean(lesson) avec fiche)")
 	}
 	jeanMu.Lock()
 	defer jeanMu.Unlock()
@@ -245,7 +245,7 @@ func JeanPatch(name, old, repl string) (string, error) {
 	f := parseFiche(name, s)
 	switch n := strings.Count(f.Content, old); {
 	case n == 0:
-		return "", fmt.Errorf("passage introuvable dans « %s » : jean_read la fiche et recopie-le exactement", name)
+		return "", fmt.Errorf("passage introuvable dans « %s » : jean(read) la fiche et recopie-le exactement", name)
 	case n > 1:
 		return "", fmt.Errorf("passage présent %d fois dans « %s » : allonge 'old' pour qu'il soit unique", n, name)
 	}

@@ -284,7 +284,7 @@ func MemAdd(name, content string) error {
 		return err
 	}
 	if _, err := os.Stat(p); err == nil {
-		return fmt.Errorf("la page existe déjà — utilise mem_edit pour la modifier")
+		return fmt.Errorf("la page existe déjà — utilise memory(edit) pour la modifier")
 	}
 	body := strings.TrimRight(content, "\n") + "\n"
 	if err := writeMemFile(name, []byte(body)); err != nil {

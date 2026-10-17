@@ -124,6 +124,10 @@ function moeRenderSettings(fit){
   if(d.has_helper) rows.push([t('moe.s_helper'), sel('moe-s-helper',
     [['off', t('moe.second_off')], ['helper', t('moe.second_helper')], ['layers', t('moe.second_layers')]],
     !d.helper_on ? 'off' : d.split_layers ? 'layers' : 'helper')]);
+  // VRAM laissée à l'écran quand la carte principale gère aussi l'affichage (#147)
+  const res = [0, 512, 1024, 1536, 2048, 3072, 4096];
+  if(d.reserve_mib && !res.includes(d.reserve_mib)) res.push(d.reserve_mib);
+  rows.push([t('moe.s_reserve'), sel('moe-s-reserve', res.sort((a,b)=>a-b).map(n=>[n, n ? (n/1024).toLocaleString('fr-FR')+' Go' : t('moe.reserve_none')]), d.reserve_mib||0)]);
   document.getElementById('moe-settings').innerHTML = rows.map(([a,b])=>
     '<div class="moe-kv"><span>'+escHtml(a)+'</span><span>'+b+'</span></div>').join('');
   moeCtxLbl();
@@ -143,7 +147,7 @@ async function moeSaveSettings(){
   if(!fit || !fit.preset) return;
   const v = id => document.getElementById(id);
   const body = {preset: fit.preset, ctx: +v('moe-s-ctx').value, kv: v('moe-s-kv').value, spec: +v('moe-s-spec').value,
-    vision: v('moe-s-vision').checked};
+    vision: v('moe-s-vision').checked, reserve_mib: +v('moe-s-reserve').value};
   const second = v('moe-s-helper') ? v('moe-s-helper').value : 'off';
   body.helper = second !== 'off';
   if(body.helper) body.split = second;
@@ -167,11 +171,12 @@ function moeRenderDetails(fit){
     [t('moe.d_main'), d.main_gpu],
     [t('moe.d_helper'), d.helper_gpu ? d.helper_gpu + (d.split_layers ? ' · '+t('moe.second_layers') : '') : t('moe.d_none')],
     [t('moe.d_vision'), d.vision_gpu || t('moe.d_none')],
+    [t('moe.s_reserve'), d.reserve_mib ? (d.reserve_mib/1024).toLocaleString('fr-FR')+' Go' : t('moe.reserve_none')],
     [t('moe.d_ctx'), (+d.ctx).toLocaleString('fr-FR')+' '+t('moe.d_tokens')],
     [t('moe.d_kv'), d.kv + (d.kv_resident ? ' · '+t('moe.d_kv_resident').replace('{n}', k(d.kv_resident)) : '')],
     [t('moe.d_mtp'), t('moe.d_mtp_val').replace('{n}', d.spec)],
     [t('moe.d_ram'), d.drop ? t('moe.d_drop') : d.mmap ? t('moe.d_mmap') : t('moe.d_inram')],
-    [t('moe.d_read'), t('moe.d_read_val').replace('{chunk}', k(d.prefill)).replace('{short}', d.short_read)],
+    [t('moe.d_read'), t('moe.d_read_val').replace('{chunk}', d.prefill ? k(d.prefill) : 'auto').replace('{short}', d.short_read)],
     [t('moe.d_root'), t('moe.d_root_val').replace('{n}', d.cache_root)],
     [t('moe.d_version'), d.version],
   ];

@@ -40,12 +40,12 @@ import (
 // toute sa navigation par niveaux vit dans SES RÉPONSES, pas dans le prompt (une
 // seule ligne de consigne : « ça va dans suivi, pas dans une note »). Ajout demandé
 // et accepté ; il sort au contraire le suivi des notes .md, qui restent petites.
-const promptCharBudget = 10800 // ~2700 tokens, tout allumé (agent+web+mémoire+suivi)
+const promptCharBudget = 10200 // ~2550 tokens, tout allumé (agent+web+mémoire+suivi) ; outils regroupés par domaine depuis la 0.18.2
 
 func TestSystemPromptStaysLean(t *testing.T) {
 	caps := Caps{Agent: true, Internet: true, Mem: MemAlways}
 	sp := baseSystemPrompt(caps)
-	tb, err := json.Marshal(EnabledTools(caps))
+	tb, err := json.Marshal(groupTools(EnabledTools(caps)))
 	if err != nil {
 		t.Fatal(err)
 	}

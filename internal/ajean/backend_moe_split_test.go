@@ -28,6 +28,9 @@ func TestMoeBuildConfigLayerSplit(t *testing.T) {
 	if argAfter(a, "--vram-reserve-mib") != "900" {
 		t.Errorf("la réserve de VRAM de l'installeur doit rester : %v", a)
 	}
+	if hasArg(a, "--prefill") {
+		t.Errorf("--prefill forcé en partage des couches (mesuré défavorable, #129) : %v", a)
+	}
 	env := out["env"].(map[string]any)
 	if env["STRATA_REMOTE_DROP"] != nil {
 		t.Errorf("experts hors RAM (mode d'aide) activé en partage des couches : %v", env)
@@ -44,6 +47,9 @@ func TestMoeBuildConfigLayerSplit(t *testing.T) {
 	}
 	if !hasArg(moeArgs(t, out), "--remote-expert-opt") {
 		t.Errorf("mode d'aide perdu sans MOE_SPLIT")
+	}
+	if argAfter(moeArgs(t, out), "--prefill") != "16384" {
+		t.Errorf("--prefill 16384 attendu en mode d'aide : %v", moeArgs(t, out))
 	}
 	// Seconde carte coupée : pas de partage même si la clé traîne.
 	cfg["MOE_SPLIT"], cfg["MOE_HELPER"] = "layers", "0"

@@ -200,7 +200,7 @@ func jeanCheckPitfall(name, text string) string {
 	defer jeanPitfallConfirmMu.Unlock()
 	if b != "" && !jeanPitfallConfirm[key] {
 		jeanPitfallConfirm[key] = true
-		return fmt.Sprintf("[refusé] ce piège semble concerner la fiche « %s » plutôt que « %s ». Rappelle jean_lesson avec fiche=%s ; si « %s » est vraiment la bonne, refais le même appel.", b, name, b, name)
+		return fmt.Sprintf("[refusé] ce piège semble concerner la fiche « %s » plutôt que « %s ». Rappelle jean(lesson) avec fiche=%s ; si « %s » est vraiment la bonne, refais le même appel.", b, name, b, name)
 	}
 	return ""
 }
@@ -238,7 +238,8 @@ func jeanAnswerThenSave(assistant Message, results []Message) bool {
 		return false
 	}
 	for _, tc := range assistant.ToolCalls {
-		switch tc.Function.Name {
+		n, _ := toolCallLegacy(tc)
+		switch n {
 		case "jean_save", "jean_patch", "jean_lesson", "jean_remember", "jean_note", "jean_rule", "jean_forget":
 		default:
 			return false

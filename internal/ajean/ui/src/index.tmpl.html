@@ -49,6 +49,9 @@
     <!-- Historique : petite icône dans la ligne du logo (la nouvelle conversation
          est dans le « + » du composeur). -->
     <span id="side-actions">
+      <button id="apps-toggle" class="side-act" onclick="openAppsView()" title="Applications" aria-label="Applications">
+        <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>
+      </button>
       <button id="hist-toggle" class="side-act" onclick="toggleHistoryView()" title="Historique" aria-label="Historique" data-i18n="chat.history_btn" data-i18n-attr="title">
         <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
       </button>
@@ -192,10 +195,6 @@
           <div><div class="link-perk-t" data-i18n="link.perk_remote_t">Accès distant sécurisé</div><div class="link-perk-d" data-i18n="link.perk_remote_d">Accédez à votre serveur AJEAN depuis n'importe où et depuis n'importe quelle application, chiffré de bout en bout — le relais ne voit rien.</div></div>
         </div>
         <div class="link-perk">
-          <span class="link-perk-i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
-          <div><div class="link-perk-t" data-i18n="link.perk_support_t">Support dédié par chat</div><div class="link-perk-d" data-i18n="link.perk_support_d">Une messagerie dédiée pour répondre à toutes vos questions, directement depuis l'application.</div></div>
-        </div>
-        <div class="link-perk">
           <span class="link-perk-i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
           <div><div class="link-perk-t" data-i18n="link.perk_backup_t">Sauvegarde intégrée</div><div class="link-perk-d" data-i18n="link.perk_backup_d">Vos réglages, presets, historique et mémoire sauvegardés automatiquement, chiffrés avant l'envoi.</div></div>
         </div>
@@ -246,7 +245,7 @@
     </div>
     <!-- Rappel discret des avantages inclus (compte connecté). En footer de TOUTE la
          section AJEAN LINK, pas coincé entre deux cartes : piloté par renderRemote. -->
-    <div id="remote-perks-mini" class="link-perks-mini" style="display:none" data-i18n="link.perks_mini" data-i18n-html>Inclus dans <b>AJEAN LINK</b> : accès distant chiffré de bout en bout · support dédié par chat · sauvegarde de vos réglages, presets, historique et mémoire.</div>
+    <div id="remote-perks-mini" class="link-perks-mini" style="display:none" data-i18n="link.perks_mini" data-i18n-html>Inclus dans <b>AJEAN LINK</b> : accès distant chiffré de bout en bout · sauvegarde de vos réglages, presets, historique et mémoire.</div>
   </details>
   <details id="lc-details"><summary><span class="stitle" data-i18n="engine.title">Engine</span></summary>
     <!-- Une seule carte : état, choix du mode et journal d'installation sont le
@@ -383,6 +382,7 @@
     <div class="subhead" data-i18n="settings.general_subhead">Général</div>
     <div class="slist">
         <label class="switchrow agent-gated"><span class="switch"><input type="checkbox" id="compact-toggle" onchange="toggleCompact()"><span class="slider"></span></span> <span data-i18n="agent.compact_toggle">compactage automatique du contexte</span><span class="help" tabindex="0" onclick="event.preventDefault();event.stopPropagation();this.classList.toggle('open')">?<span class="tip" data-i18n="agent.compact_help" data-i18n-html>activé par défaut : quand la conversation approche de la limite de contexte, les vieux tours sont résumés automatiquement (façon Hermes) au lieu de t'imposer un « vider ». Discussions quasi illimitées sans perdre le fil.</span></span></label>
+        <div class="switchrow agent-gated compact-max-row"><span data-i18n="agent.compact_max">compacter au plus tard à</span><select id="compact-max" class="ctl" onchange="setCompactMax()"><option value="0" data-i18n="agent.compact_max_auto">75 % du contexte</option><option value="16384">16K</option><option value="24576">24K</option><option value="32768">32K</option><option value="49152">48K</option><option value="65536">64K</option><option value="98304">96K</option><option value="131072">128K</option></select><span class="help" tabindex="0" onclick="event.preventDefault();event.stopPropagation();this.classList.toggle('open')">?<span class="tip" data-i18n="agent.compact_max_help">Par défaut, le contexte est compacté à 75 % de la fenêtre du modèle. Avec une très grande fenêtre, ce seuil n'est presque jamais atteint et les longues conversations deviennent lentes. Un plafond compacte plus tôt, quelle que soit la fenêtre.</span></span></div>
         <label class="switchrow"><span class="switch"><input type="checkbox" id="push-toggle" onchange="togglePush()"><span class="slider"></span></span> <span data-i18n="agent.push_toggle">me prévenir quand la réponse est prête</span><span class="help" tabindex="0" onclick="event.preventDefault();event.stopPropagation();this.classList.toggle('open')">?<span class="tip" data-i18n="agent.push_help" data-i18n-html>Le serveur t'envoie une <b>notification</b> à la fin de chaque réponse, même l'app fermée ou le téléphone verrouillé. Sur iPhone : <b>ajoute d'abord AJEAN à l'écran d'accueil</b> puis active depuis l'app installée. À régler sur chaque appareil.</span></span></label>
         <!-- Chiffrement (off par défaut) : UN seul interrupteur. Chiffre la mémoire
              ET les conversations. Ton mot de passe ouvre le coffre, ton navigateur
@@ -390,6 +390,26 @@
              déchiffrer seul. Le corps (état + bouton déverrouiller) ne s'affiche
              que lorsque c'est actif. -->
         <label class="switchrow"><span class="switch"><input type="checkbox" id="mem-enc-toggle" onchange="toggleMemEncrypt()"><span class="slider"></span></span> <span data-i18n="agent.encrypt_toggle">activer le chiffrement</span><span class="help" tabindex="0" onclick="event.preventDefault();event.stopPropagation();this.classList.toggle('open')">?<span class="tip" data-i18n="agent.encrypt_help" data-i18n-html>Chiffre ta <b>mémoire</b> ET tes <b>conversations</b> au repos (AES-256), protégées par ta <b>clé d'accès</b> : si tu as accès à l'interface, c'est déjà déverrouillé ; sinon on te demande ta clé d'accès. Une <b>clé de récupération</b> t'est donnée à l'activation (garde-la). Rien n'est perdu : snapshots automatiques avant chaque bascule.</span></span></label>
+        <!-- Navigateur des liens : PAS gaté par le mode agent — un lien doit
+             s'ouvrir quelles que soient les options de l'agent. La fenêtre AJEAN
+             elle-même n'est pas concernée : elle reste dans le navigateur qui
+             l'a ouverte (Edge sous Windows), seul le lien cliqué change de
+             navigateur. -->
+        <label class="switchrow"><span data-i18n="settings.link_browser_label">liens externes dans</span><span class="help" tabindex="0" onclick="event.preventDefault();event.stopPropagation();this.classList.toggle('open')">?<span class="tip" data-i18n="settings.link_browser_help" data-i18n-html>Les liens cliqués dans AJEAN s'ouvrent dans ce navigateur. La fenêtre AJEAN elle-même ne change pas : seuls les liens cliqués changent de navigateur. « Navigateur par défaut » suit le réglage de ta machine et couvre aussi les navigateurs absents de cette liste.</span></span>
+          <!-- class="sctl" n'est pas cosmétique : sans elle, un <select> prend la
+               largeur de son option la plus longue et écrase le libellé en face
+               (constaté : quatre lignes pour « ouvrir les liens externes dans »).
+               La règle .switchrow>.sctl le borne à 62 % et le pousse à droite.
+               Le « ? » doit rester AVANT le select dans le DOM : sctl impose
+               order:2, donc tout ce qui le suit passerait à sa gauche. -->
+          <select id="link-browser" class="sctl" onchange="setLinkBrowser(this.value)">
+            <option value="auto" data-i18n="settings.link_browser_auto">navigateur par défaut</option>
+            <option value="chrome">Google Chrome</option>
+            <option value="edge">Microsoft Edge</option>
+            <option value="brave">Brave</option>
+            <option value="chromium">Chromium</option>
+          </select>
+        </label>
     </div>
   </details>
   <!-- Section « Actions » retirée : la MAJ s'affiche automatiquement dans le bandeau
@@ -853,6 +873,10 @@
       <div id="task-result-block" class="pe-group" style="display:none">
         <div class="pe-gh"><span data-i18n="task.last_result">Dernier résultat</span> <span id="task-result-when" class="pe-sub" style="display:inline;margin:0"></span></div>
         <div id="task-result" class="task-report"></div>
+      </div>
+      <div id="task-history-block" class="pe-group" style="display:none">
+        <div class="pe-gh"><span data-i18n="task.history">Réponses précédentes</span></div>
+        <div id="task-history" class="task-history"></div>
       </div>
 
       <div class="pe-group">
@@ -1408,4 +1432,42 @@
 <script src="marked.min.js"></script>
 <script>
 @@JS@@
-</script></body></html>
+</script><!-- Applications (22-apps.js) : grille des apps créées par l'IA, puis l'app
+     ouverte en plein écran dans une iframe sandbox sans origine. -->
+<div id="apps-view" class="apps-view" hidden>
+  <div class="apps-wrap">
+    <div class="apps-head">
+      <div class="apps-titles"><h2 id="apps-title">Applications</h2><span id="apps-foot" class="apps-count"></span></div>
+      <button class="modal-x" onclick="closeAppsView()" aria-label="Fermer">×</button>
+    </div>
+    <div class="apps-bar">
+      <div class="hist-search apps-search">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input id="apps-search" type="search" oninput="onAppsSearch(this.value)" autocomplete="off">
+      </div>
+      <button id="apps-new" class="apps-new" type="button" onclick="newAppPrompt()">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        <span id="apps-new-txt"></span>
+      </button>
+    </div>
+    <div id="apps-grid" class="apps-grid"></div>
+    <div id="apps-empty" class="mm-empty apps-empty" hidden>
+      <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></svg>
+      <span id="apps-empty-txt"></span>
+    </div>
+  </div>
+</div>
+<div id="app-run" class="app-run" hidden>
+  <div class="app-run-head">
+    <span id="app-run-ico" class="app-ico sm"></span>
+    <span class="app-run-titles"><span id="app-run-name"></span><span id="app-run-ver"></span></span>
+    <button id="app-run-close" class="modal-x" onclick="closeAppRun()" aria-label="Fermer">×</button>
+  </div>
+  <div id="app-err" class="app-err" hidden>
+    <b id="app-err-title"></b>
+    <pre id="app-err-list"></pre>
+    <span class="app-err-acts"><button id="app-err-fix" class="primary" onclick="appAskFix()"></button><button id="app-err-hide" onclick="document.getElementById('app-err').hidden=true"></button></span>
+  </div>
+  <div id="app-run-body" class="app-run-body"></div>
+</div>
+</body></html>

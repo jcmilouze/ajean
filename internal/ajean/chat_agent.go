@@ -34,7 +34,7 @@ func cmdAgent(args []string) error {
 			state = green("on")
 		}
 		fmt.Printf("%s  état: %s\n", cyan("Mode agent"), state)
-		fmt.Printf("  outils : %s (timeout %ds, max %ds) + write/edit + mémoire (mem_search/mem_read/mem_add/mem_edit)\n", shellName(), toolDefaultTimeout, toolMaxTimeout)
+		fmt.Printf("  outils : %s (timeout %ds, max %ds) + file(write)/file(edit) + mémoire (memory(search)/memory(read)/memory(add)/memory(edit))\n", shellName(), toolDefaultTimeout, toolMaxTimeout)
 		mem := MemList()
 		if len(mem) == 0 {
 			fmt.Printf("  mémoire : aucune page — crée %s/<nom>.md\n", memoryDir())

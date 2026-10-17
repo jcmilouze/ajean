@@ -124,7 +124,7 @@ func cuScrollTool() Tool {
 func cuClickXYTool() Tool {
 	return Tool{Type: "function", Function: ToolFunction{
 		Name:        "browser_click_xy",
-		Description: fmt.Sprintf("Click at pixel coordinates (x from the left, y from the top) read off the latest browser_screenshot — %dx%d pixels, 1:1 with the page, with a coordinate grid drawn every 100px to read x/y precisely. Use it ONLY for something the numbered elements can't reach: a cookie/consent banner inside a cross-origin iframe, a canvas, a map. Otherwise always prefer browser_click(ref).", cuViewW, cuViewH),
+		Description: fmt.Sprintf("Click at pixel coordinates (x from the left, y from the top) read off the latest browser(screenshot) — %dx%d pixels, 1:1 with the page, with a coordinate grid drawn every 100px to read x/y precisely. Use it ONLY for something the numbered elements can't reach: a cookie/consent banner inside a cross-origin iframe, a canvas, a map. Otherwise always prefer browser(click, ref).", cuViewW, cuViewH),
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -164,9 +164,9 @@ func computerUseTools() []Tool {
 // cuPromptLine est la consigne d'usage ajoutée au prompt système quand le
 // computer use est actif (l'ordre d'appel que les schémas isolés ne disent pas).
 func cuPromptLine() string {
-	line := "\nBrowser (on this machine): browser_open a URL, then act on its numbered elements; after each change, use the fresh numbers. For an element out of view use browser_find, never guessed URLs; on an error page, go 'back' or try another link."
+	line := "\nBrowser (on this machine): browser(open) a URL, then act on its numbered elements; after each change, use the fresh numbers. For an element out of view use browser(find), never guessed URLs; on an error page, go 'back' or try another link."
 	if visionEnabled() {
-		line += " When the numbers aren't enough (canvas, a button missing from the list), browser_screenshot then browser_click_xy at its position."
+		line += " When the numbers aren't enough (canvas, a button missing from the list), browser(screenshot) then browser(click_xy) at its position."
 	}
 	line += "\n"
 	return line
@@ -358,7 +358,7 @@ func toolCUScreenshot(ctx context.Context, args map[string]any) (string, map[str
 	// automatiquement dans le chat. Pour la lui afficher, il faut l'insérer en IMAGE
 	// Markdown ![...](fichier) — un simple lien [texte](fichier) ne fait qu'un bouton
 	// de téléchargement, pas d'aperçu.
-	msg := fmt.Sprintf("[ok] capture prise (tu la vois ci-dessous, %dx%d px, 1:1 avec la page). Une GRILLE de repères y est surimprimée (lignes + chiffres tous les 100 px) POUR TOI seulement, afin de viser précisément — le fichier enregistré, lui, est PROPRE (sans grille), donc l'aperçu ![capture] montré à l'utilisateur est net. Si un élément visible n'est PAS dans la liste numérotée (bandeau cookies en iframe, canvas), clique-le du premier coup avec browser_click_xy(x,y), coordonnées lues sur la grille.", cuViewW, cuViewH)
+	msg := fmt.Sprintf("[ok] capture prise (tu la vois ci-dessous, %dx%d px, 1:1 avec la page). Une GRILLE de repères y est surimprimée (lignes + chiffres tous les 100 px) POUR TOI seulement, afin de viser précisément — le fichier enregistré, lui, est PROPRE (sans grille), donc l'aperçu ![capture] montré à l'utilisateur est net. Si un élément visible n'est PAS dans la liste numérotée (bandeau cookies en iframe, canvas), clique-le du premier coup avec browser(click_xy, x,y), coordonnées lues sur la grille.", cuViewW, cuViewH)
 	if saved != "" {
 		msg += " Enregistrée sous « " + saved + " ». Pour l'AFFICHER à l'utilisateur dans le chat, insère-la en IMAGE Markdown : ![capture](" + saved + "). Un simple lien [capture](" + saved + ") ne donne qu'un bouton de téléchargement, sans aperçu. Ne cherche pas de fichier sur le disque, c'est celui-ci."
 	}
@@ -400,7 +400,7 @@ func cmdComputer(args []string) error {
 		if err := setComputerUseEnabled(true); err != nil {
 			return err
 		}
-		msg := " contrôle du navigateur activé — l'IA pilote un navigateur (browser_open/browser_click/browser_type/…) si le mode agent est actif"
+		msg := " contrôle du navigateur activé — l'IA pilote un navigateur (browser(open)/browser(click)/browser(type)/…) si le mode agent est actif"
 		if chromePath() == "" {
 			msg += "\n" + red("[!]") + " aucun Chrome/Chromium/Edge détecté — installe-le ou définis AJEAN_CHROME=<chemin>"
 		}
@@ -423,9 +423,9 @@ func cmdComputer(args []string) error {
 		} else {
 			fmt.Printf("  navigateur : %s\n", bold(bin))
 		}
-		fmt.Printf("  outils     : browser_open, browser_snapshot, browser_find, browser_click, browser_type, browser_key, browser_scroll")
+		fmt.Printf("  outils     : browser(open), browser(snapshot), browser(find), browser(click), browser(type), browser(key), browser(scroll)")
 		if visionEnabled() {
-			fmt.Printf(", browser_screenshot, browser_click_xy")
+			fmt.Printf(", browser(screenshot), browser(click_xy)")
 		}
 		fmt.Println()
 	default:

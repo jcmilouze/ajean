@@ -30,6 +30,9 @@ async function loadPrefs(){
         const v=p.prefs[o.id.replace('-','_')];
         if(v!==undefined) applyView(o.id, v==='1');
       });
+      // Le navigateur des liens suit la même règle : localStorage pour
+      // l'immédiat, le serveur comme source de vérité.
+      if(p.prefs.link_browser) applyLinkBrowser(p.prefs.link_browser);
     }
   }catch(e){}
 }

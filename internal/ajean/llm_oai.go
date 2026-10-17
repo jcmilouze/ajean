@@ -57,8 +57,13 @@ func oaiHandler() http.Handler {
 	lp.ErrorHandler = func(w http.ResponseWriter, r *http.Request, e error) {
 		http.Error(w, "llama-server injoignable: "+e.Error(), http.StatusBadGateway)
 	}
+	ant := anthropicHandler()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p := r.URL.Path
+		if isAnthropicPath(p) { // Claude Code : traduit vers le preset actif
+			ant.ServeHTTP(w, r)
+			return
+		}
 		if strings.HasPrefix(p, "/v1") || p == "/health" || p == "/props" || p == "/metrics" || strings.HasPrefix(p, "/slots") {
 			lp.ServeHTTP(w, r)
 			return

@@ -506,9 +506,9 @@ func (s *cdpSession) snapshot() (string, error) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# %s\n%s\n\n", snap.Title, snap.URL)
 	if len(snap.Refs) == 0 {
-		b.WriteString("(aucun élément interactif détecté — page vide, en cours de chargement, ou rendue sur canvas ; réessaie browser_snapshot, ou utilise browser_screenshot pour voir)")
+		b.WriteString("(aucun élément interactif détecté — page vide, en cours de chargement, ou rendue sur canvas ; réessaie browser(snapshot), ou utilise browser(screenshot) pour voir)")
 	} else {
-		fmt.Fprintf(&b, "%d élément(s) interactif(s) VISIBLE(s) — clique par numéro avec browser_click(ref) :\n", len(snap.Refs))
+		fmt.Fprintf(&b, "%d élément(s) interactif(s) VISIBLE(s) — clique par numéro avec browser(click, ref) :\n", len(snap.Refs))
 		b.WriteString(strings.Join(snap.Refs, "\n"))
 	}
 	// Indice de défilement : la liste ne couvre QUE la partie visible. Sans ce
@@ -517,10 +517,10 @@ func (s *cdpSession) snapshot() (string, error) {
 	if snap.Below > 20 || snap.Above > 20 {
 		b.WriteString("\n\n")
 		if snap.Below > 20 {
-			fmt.Fprintf(&b, "↓ encore ~%d px sous la vue — browser_scroll(down) pour révéler d'autres éléments. ", snap.Below)
+			fmt.Fprintf(&b, "↓ encore ~%d px sous la vue — browser(scroll, down) pour révéler d'autres éléments. ", snap.Below)
 		}
 		if snap.Above > 20 {
-			fmt.Fprintf(&b, "↑ ~%d px au-dessus — browser_scroll(up) pour y revenir.", snap.Above)
+			fmt.Fprintf(&b, "↑ ~%d px au-dessus — browser(scroll, up) pour y revenir.", snap.Above)
 		}
 	}
 	return strings.TrimRight(b.String(), " "), nil
@@ -554,7 +554,7 @@ func (s *cdpSession) refMissingHint() string {
 		return ""
 	}
 	s.lastSnap = full
-	return ". Numéros valides maintenant (un élément hors de la vue : browser_find) :\n\n" + full
+	return ". Numéros valides maintenant (un élément hors de la vue : browser(find)) :\n\n" + full
 }
 
 // cdpFindJS cherche, sur TOUTE la page (pas seulement le viewport), les éléments
@@ -777,7 +777,7 @@ func (s *cdpSession) typeInto(ref int, text string) error {
 	case "NOTFOUND":
 		return fmt.Errorf("champ [%d] introuvable : il n'est pas (ou plus) dans la liste", ref)
 	case "NOOPT":
-		return fmt.Errorf("aucune option de la liste [%d] ne correspond à « %s » — fais un browser_screenshot pour voir les choix", ref, text)
+		return fmt.Errorf("aucune option de la liste [%d] ne correspond à « %s » — fais un browser(screenshot) pour voir les choix", ref, text)
 	case "SELECT":
 		return nil // liste déroulante réglée, rien à taper
 	default: // TEXT

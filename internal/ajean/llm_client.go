@@ -466,6 +466,9 @@ func EnabledTools(caps Caps) []Tool {
 		// récurrents et les gérer. Réservé au mode agent (une tâche sans outils
 		// pour agir n'aurait rien à livrer).
 		tools = append(tools, taskListTool(), taskCreateTool(), taskUpdateTool(), taskDeleteTool())
+		// Apps : l'IA crée de petites applications (et leurs scripts) que
+		// l'utilisateur ouvre dans l'écran Applications. Voir apps.go.
+		tools = append(tools, appTool())
 		// Mémoire longue de la conversation : rappeler un bloc archivé au compactage
 		// (recall) ou le retrouver par mots-clés (recall_search). Réservé au mode
 		// agent — le compactage n'injecte les ids rappelables que là (voir
@@ -639,7 +642,9 @@ func fillToolResult(ev *ToolUsedEvent, result string) *ToolUsedEvent {
 //     SANS l'image et tournait en boucle (vécu sur le test de navigation). Ces outils ont des
 //     effets de bord (naviguer, cliquer, taper) : on les exécute toujours.
 func dedupableTool(name string) bool {
-	if name == "bash" || name == "see_image" || name == "see_video" {
+	// app : l'état change entre deux appels identiques (read après update,
+	// script_test après script_write) ; un vieux résultat trompait l'IA.
+	if name == "bash" || name == "app" || name == "see_image" || name == "see_video" {
 		return false
 	}
 	return !strings.HasPrefix(name, "browser_")
@@ -665,7 +670,7 @@ func repeatedCallResult(prev string, repeats int) string {
 		return "[déjà fait] Cet appel exact a déjà été exécuté " + strconv.Itoa(repeats) +
 			" fois dans ce tour ; son résultat est plus haut dans la conversation. " +
 			"Ne le redemande plus : réponds avec ce que tu as, ou change d'approche " +
-			"(autre URL, autres arguments, web_grep pour cibler)."
+			"(autre URL, autres arguments, web(grep) pour cibler)."
 	}
 	return "[déjà fait] Appel identique déjà exécuté dans ce tour — non rejoué. " +
 		"Voici à nouveau son résultat ; ne le redemande pas une troisième fois.\n\n" + prev
@@ -729,6 +734,59 @@ func previewArg(args, key string) string {
 		b.WriteByte(c)
 	}
 	return b.String()
+}
+
+// streamBodyWatch suit, sur les arguments JSON d'un appel d'outil d'écriture qui
+// ne font que s'ALLONGER, l'apparition d'un saut de ligne dans le corps à
+// afficher — SANS redécoder ce corps à chaque chunk de flux.
+//
+// Pourquoi : le corps d'un `write` / `mem_add` peut faire des dizaines de
+// kilo-octets et arrive un token à la fois (~25 000 chunks pour 100 Ko). Le
+// redécoder ET le recompter à CHAQUE chunk coûtait O(n²) — plusieurs secondes de
+// CPU et autant de déchets à ramasser — dans le processus qui relaie aussi, en
+// direct, les jetons vers l'interface : le flux s'en trouvait retardé. Ici le
+// coût par chunk est celui du seul segment nouveau, donc linéaire au total.
+//
+// Comme les arguments ne font que s'allonger, un index « seen » suffit : chaque
+// octet n'est parcouru qu'une fois sur toute la durée de l'appel.
+type streamBodyWatch struct {
+	seen  int  // longueur d'arguments déjà parcourue
+	carry bool // l'octet parcouru précédent était un « \ » : échappement en cours
+	marks int  // sauts de ligne repérés depuis le début (monotone croissant)
+}
+
+// grew : args (qui ne fait que s'allonger) a-t-il gagné un saut de ligne depuis
+// le dernier appel ? On repère le « \n » échappé (cas normal d'une chaîne JSON)
+// ET un vrai octet de saut de ligne (JSON imprimé ou malformé). Le repérage est
+// volontairement LARGE : un faux positif ne coûte qu'un décodage de trop, alors
+// qu'un saut manqué figerait l'aperçu en direct jusqu'à la ligne suivante.
+//
+// Un « \ » coupé en deux par le découpage du flux (fin de chunk) est retenu par
+// carry, sinon le « n » du chunk suivant ne serait pas vu comme un échappement et
+// la ligne n'apparaîtrait jamais.
+func (w *streamBodyWatch) grew(args string) bool {
+	if w.seen >= len(args) {
+		return false
+	}
+	seg := args[w.seen:]
+	w.seen = len(args)
+	before := w.marks
+	for i := 0; i < len(seg); i++ {
+		if w.carry {
+			w.carry = false
+			if seg[i] == 'n' {
+				w.marks++
+			}
+			continue
+		}
+		switch seg[i] {
+		case '\n':
+			w.marks++
+		case '\\':
+			w.carry = true
+		}
+	}
+	return w.marks > before
 }
 
 // StatsEvent carries llama.cpp's per-completion timing (final chunk).
@@ -913,7 +971,7 @@ func runChat(ctx context.Context, messages []Message, temperature float64, caps 
 	}
 	notifyUserPrompt(ctx, messages, caps, cb)
 	var extra []Message
-	tools := withRecallTools(EnabledTools(caps), messages)
+	tools := groupTools(withRecallTools(EnabledTools(caps), messages))
 	// Destination des complétions : llama-server local, ou une API OpenAI-compatible
 	// externe si le preset actif en est un (voir backend_external.go). Résolu une
 	// fois par tour ; une bascule de preset en plein tour est rare et se rejoue au
@@ -1118,6 +1176,10 @@ func runChat(ctx context.Context, messages []Message, temperature float64, caps 
 		usageGen, genChunks := 0, 0
 		lastPreview := ""   // last command preview emitted (to stream the typing)
 		lastBodyLines := -1 // lignes déjà diffusées du corps en cours d'écriture
+		// Suit les sauts de ligne du corps sans le redécoder à chaque chunk (voir
+		// streamBodyWatch) : une grosse écriture allongerait sinon un décodage
+		// quadratique, dans le processus qui relaie les jetons vers l'interface.
+		var bodyWatch streamBodyWatch
 		// argToks : tokens produits pour écrire les ARGUMENTS d'outil dans cette
 		// complétion (≈ 1 par chunk de flux portant du texte d'arguments). Envoyé en
 		// CUMUL sur les événements tool_used pour alimenter le compteur du bas.
@@ -1273,8 +1335,14 @@ func runChat(ctx context.Context, messages []Message, temperature float64, caps 
 				// Stream the command being typed: extract the partial value and
 				// emit it whenever it grows, so the UI shows it appear live.
 				if cur := toolCalls[0]; cur != nil {
+					// Outil de domaine (memory, web…) : nom interne d'après l'action déjà
+					// écrite, pour que libellé et corps en direct suivent l'outil réel.
+					cname := legacyToolName(cur.Function.Name, previewArg(cur.Function.Arguments, "action"))
+					if cname == "" {
+						cname = cur.Function.Name
+					}
 					key := "command"
-					switch cur.Function.Name {
+					switch cname {
 					case "mem_search", "web_search", "web_images":
 						key = "query"
 					case "mem_read", "mem_add", "mem_edit", "mem_delete", "edit", "write", "see_image", "see_video":
@@ -1285,19 +1353,33 @@ func runChat(ctx context.Context, messages []Message, temperature float64, caps 
 						key = "name"
 					case "task_delete", "recall":
 						key = "id"
+					case "app":
+						key = "action"
 					case "recall_search":
 						key = "query"
 					case "task_list":
 						key = ""
 					}
 					p := previewArg(cur.Function.Arguments, key)
+					if cname == "app" {
+						p = appStreamLabel(cur.Function.Arguments)
+					}
 					// Corps en cours de frappe pour les outils d'écriture : on le diffuse
 					// à la LIGNE, pas au token. Un événement par token republierait tout le
 					// contenu à chaque fois (coût quadratique, et c'est ce flot qui saturait
 					// le rendu mobile) ; à la ligne, le nombre d'événements est celui du
 					// fichier et l'animation reste fluide.
+					//
+					// On ne DÉCODE le corps (previewArg) que lorsqu'un nouveau saut de ligne
+					// a pu apparaître — y compris au tout premier passage, où lastBodyLines
+					// vaut -1 : il faut alors livrer la première ligne même si aucun « \n »
+					// n'est encore arrivé.
 					body := ""
-					if bk := writeBodyKey(cur.Function.Name); bk != "" {
+					bk := writeBodyKey(cname)
+					if bk == "" && cname == "app" {
+						bk = appBodyKey(cur.Function.Arguments)
+					}
+					if bk != "" && (lastBodyLines < 0 || bodyWatch.grew(cur.Function.Arguments)) {
 						body = previewArg(cur.Function.Arguments, bk)
 					}
 					grew := body != "" && strings.Count(body, "\n") > lastBodyLines
@@ -1308,7 +1390,7 @@ func runChat(ctx context.Context, messages []Message, temperature float64, caps 
 						if grew {
 							lastBodyLines = strings.Count(body, "\n")
 						}
-						if !scb(StreamEvent{ToolUsed: &ToolUsedEvent{Name: cur.Function.Name, Label: lastPreview, Body: body, Typing: true, ArgToks: argToks}}) {
+						if !scb(StreamEvent{ToolUsed: &ToolUsedEvent{Name: cname, Label: lastPreview, Body: body, Typing: true, ArgToks: argToks}}) {
 							aborted = true
 							break
 						}
@@ -1514,6 +1596,19 @@ func runChat(ctx context.Context, messages []Message, temperature float64, caps 
 				}
 				var args map[string]any
 				_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
+				// Outil de domaine → outil interne (tools_grouped.go). Tout ce qui suit
+				// (libellé, exécution, UI, garde-fous) voit l'outil interne.
+				if !badArgs[tc.ID] {
+					legacy, eargs, emsg := expandToolCall(tc.Function.Name, args)
+					if emsg != "" {
+						cb(StreamEvent{ToolUsed: fillToolResult(&ToolUsedEvent{Name: tc.Function.Name, Label: str(args["action"]), Done: true, ArgToks: flushArgToks()}, emsg)})
+						toolMsg := Message{Role: "tool", ToolCallID: tc.ID, Content: emsg}
+						messages = append(messages, toolMsg)
+						extra = append(extra, toolMsg)
+						continue
+					}
+					tc.Function.Name, args = legacy, eargs
+				}
 				// Derive the human label (command / skill name) up front so we can
 				// announce the call BEFORE running it — otherwise the UI shows
 				// nothing while a slow shell command runs and looks frozen.
@@ -1539,6 +1634,8 @@ func runChat(ctx context.Context, messages []Message, temperature float64, caps 
 					label, _ = args["name"].(string)
 				case "task_delete":
 					label, _ = args["id"].(string)
+				case "app":
+					label = appToolLabel(args)
 				case "tracker":
 					act, _ := args["action"].(string)
 					nm, _ := args["name"].(string)
@@ -1569,7 +1666,7 @@ func runChat(ctx context.Context, messages []Message, temperature float64, caps 
 				// erreur trompeuse (« fichier manquant », « commande vide »). On le dit
 				// tel quel au modèle, pour qu'il renvoie un appel complet.
 				if isJeanReflecting(ctx) && !jeanReflectAllowed(tc.Function.Name) && !jeanReflectScriptWrite(ctx, tc.Function.Name, args) && !jeanReflectReadFile(ctx, tc.Function.Name, args) {
-					result = "[erreur] pendant une révision de la mémoire, seuls les outils jean_* de mémoire sont permis"
+					result = "[erreur] pendant une révision de la mémoire, seul l'outil jean (mémoire) est permis"
 					cb(StreamEvent{ToolUsed: fillToolResult(&ToolUsedEvent{Name: tc.Function.Name, Label: label, Done: true, ArgToks: flushArgToks()}, result)})
 					toolMsg := Message{Role: "tool", ToolCallID: tc.ID, Content: result}
 					messages = append(messages, toolMsg)
@@ -1738,6 +1835,15 @@ func runChat(ctx context.Context, messages []Message, temperature float64, caps 
 					result = toolTaskUpdate(args)
 				case "task_delete":
 					result = toolTaskDelete(args)
+				case "app":
+					if strings.EqualFold(str(args["action"]), "check") {
+						result, visionImg = toolAppCheck(ctx, args)
+						break
+					}
+					result = toolApp(ctx, args)
+					if !strings.HasPrefix(result, "[erreur]") {
+						diff, diffAdd, diffDel = appDiff(args)
+					}
 				case "web_search":
 					result = capWebOutput(toolWebSearch(args))
 				case "web_images":
@@ -1839,7 +1945,7 @@ func runChat(ctx context.Context, messages []Message, temperature float64, caps 
 				}
 				if changed {
 					messages = c
-					tools = withRecallTools(EnabledTools(caps), messages)
+					tools = groupTools(withRecallTools(EnabledTools(caps), messages))
 					// La nouvelle base contient déjà tout ce tour : on la publie et on
 					// repart d'un `extra` vide, sinon l'appelant la ré-empilerait avec
 					// les messages du tour et dupliquerait tout.
@@ -1868,7 +1974,7 @@ func runChat(ctx context.Context, messages []Message, temperature float64, caps 
 				// l'UI de l'effacer avant de relancer, pour ne pas afficher deux
 				// blocs de réflexion successifs.
 				cb(StreamEvent{DropReasoning: true})
-				nudge := "You reasoned but did not call a tool or answer. Act NOW: call the appropriate tool directly (e.g. mem_search/mem_read/bash), or give your final answer if you already have the info. Don't explain, act."
+				nudge := "You reasoned but did not call a tool or answer. Act NOW: call the appropriate tool directly (e.g. memory(search)/memory(read)/bash), or give your final answer if you already have the info. Don't explain, act."
 				if nudgeCount > 1 {
 					// Le premier nudge n'a pas suffi : le modèle re-décrit le même plan
 					// sans l'exécuter. Second nudge plus impératif, on lui interdit

@@ -1,7 +1,6 @@
 package ajean
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -57,14 +56,12 @@ func collectReadPageNames(msgs []Message) []string {
 	readCall := map[string]string{}
 	for _, m := range msgs {
 		for _, tc := range m.ToolCalls {
-			if tc.Function.Name != "mem_read" || tc.ID == "" {
+			n, a := toolCallLegacy(tc)
+			if n != "mem_read" || tc.ID == "" {
 				continue
 			}
-			var a map[string]any
-			if json.Unmarshal([]byte(tc.Function.Arguments), &a) == nil {
-				if f, _ := a["file"].(string); f != "" {
-					readCall[tc.ID] = f
-				}
+			if f, _ := a["file"].(string); f != "" {
+				readCall[tc.ID] = f
 			}
 		}
 	}
@@ -124,7 +121,7 @@ func buildReminderMessage(names []string) (Message, bool) {
 	if len(names) > memReminderMaxNames {
 		names = names[len(names)-memReminderMaxNames:] // les plus récentes
 	}
-	content := fmt.Sprintf("%s Memory pages you read earlier: %s\nTheir full content is no longer inline after context compaction — if any of them is relevant to what you're doing, mem_read it again so you have all the rules and info you need before answering.",
+	content := fmt.Sprintf("%s Memory pages you read earlier: %s\nTheir full content is no longer inline after context compaction — if any of them is relevant to what you're doing, memory(read) it again so you have all the rules and info you need before answering.",
 		memReminderPrefix, strings.Join(names, ", "))
 	return Message{Role: "system", Content: content}, true
 }

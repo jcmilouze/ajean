@@ -237,6 +237,7 @@ function openTask(id){
 // COMPLET (défilable), l'état (ok / échec / en cours) et l'horodatage. Masqué pour
 // une tâche neuve ou jamais exécutée.
 function renderTaskResult(tk){
+  renderTaskHistory(tk);
   const block = document.getElementById('task-result-block');
   const box = document.getElementById('task-result');
   const when = document.getElementById('task-result-when');
@@ -261,6 +262,39 @@ function renderTaskResult(tk){
   const rep = (tk.last_report||'').trim();
   if(rep){ box.classList.add('md-report'); box.innerHTML = md(rep); }
   else { box.classList.add('report-empty'); box.textContent = t('tasks.result_empty'); }
+}
+
+// renderTaskHistory : les passages précédents (le dernier est déjà affiché
+// au-dessus), une ligne chacun, la réponse se déplie au clic (#143).
+function renderTaskHistory(tk){
+  const block = document.getElementById('task-history-block');
+  const box = document.getElementById('task-history');
+  const runs = (tk && tk.history || []).slice(1);
+  block.style.display = runs.length ? '' : 'none';
+  box.textContent = '';
+  runs.forEach(r=>{
+    const row = document.createElement('div');
+    row.className = 'th-row th-'+(r.status||'ok');
+    const head = document.createElement('button');
+    head.type = 'button'; head.className = 'th-head';
+    const st = r.status === 'error' ? t('tasks.history_error') : r.status === 'stopped' ? t('tasks.history_stopped') : '';
+    head.innerHTML = '<span class="th-when"></span><span class="th-meta"></span><svg class="th-chev" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
+    head.querySelector('.th-when').textContent = new Date(r.at).toLocaleString();
+    head.querySelector('.th-meta').textContent = [r.dur_ms ? fmtDur(r.dur_ms) : '', st].filter(Boolean).join('  ·  ');
+    const body = document.createElement('div');
+    body.className = 'task-report th-body'; body.hidden = true;
+    head.onclick = ()=>{
+      if(!body.dataset.done){
+        body.dataset.done = '1';
+        if(r.status === 'error'){ body.classList.add('report-err'); body.textContent = t('tasks.result_failed_prefix')+(r.error||t('tasks.result_unknown_error')); }
+        else if((r.report||'').trim()){ body.classList.add('md-report'); body.innerHTML = md(r.report); }
+        else { body.classList.add('report-empty'); body.textContent = r.status === 'stopped' ? t('tasks.history_stopped') : t('tasks.result_empty'); }
+      }
+      body.hidden = !body.hidden; row.classList.toggle('open', !body.hidden);
+    };
+    row.append(head, body);
+    box.appendChild(row);
+  });
 }
 
 function closeTask(){ hideModal('task-modal'); taskEditing = null; }

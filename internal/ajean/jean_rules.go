@@ -108,7 +108,7 @@ func JeanRule(action, kind, from, to string, max int, why string) (string, error
 			return "", fmt.Errorf("max_list_items : 'max' doit être un entier ≥ 1")
 		}
 	default:
-		return "", fmt.Errorf("kind inconnu : replace, no_numbered_lists ou max_list_items. Une règle qui ne se vérifie pas mécaniquement va dans jean_lesson")
+		return "", fmt.Errorf("kind inconnu : replace, no_numbered_lists ou max_list_items. Une règle qui ne se vérifie pas mécaniquement va dans jean(lesson)")
 	}
 	next := 1
 	for i, o := range rs {
@@ -158,7 +158,7 @@ func jeanRulesBlock() string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("\nRules your harness enforces on everything you write (follow them anyway; manage with jean_rule):\n")
+	b.WriteString("\nRules your harness enforces on everything you write (follow them anyway; manage with jean(rule)):\n")
 	for _, r := range rs {
 		b.WriteString(r.String() + "\n")
 	}
