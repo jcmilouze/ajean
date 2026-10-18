@@ -810,6 +810,7 @@
         <span id="jm-count" class="jm-budget"></span>
       </div>
       <div class="jm-hint" data-i18n="jean.mem_journal_hint">Tout ce qui s'est passé.</div>
+      <label class="jm-embed"><span class="switch"><input type="checkbox" id="jm-embed" onchange="jmToggleEmbed()"><span class="slider"></span></span><span class="jm-embed-t"><span data-i18n="jean.embed_title">Recherche par le sens</span><span id="jm-embed-st" class="jm-embed-st"></span></span></label>
       <input id="jm-search" class="mem-search sctl" type="search" oninput="jmSearchDebounced()" placeholder="chercher dans le journal…" data-i18n="jean.mem_search" data-i18n-attr="placeholder">
       <div id="jm-journal" class="jm-list"></div>
       <button id="jm-more" class="jm-more" style="display:none" onclick="jmLoad(true)" data-i18n="chat.show_more">voir plus</button>

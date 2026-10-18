@@ -33,7 +33,7 @@ func memIndexMessage() (Message, bool) {
 		return Message{}, false
 	}
 	content := memIndexPrefix + " for project \"" + projectName(activeProjectSlug()) +
-		"\" — the pages you can open with memory(read) (only titles/hooks here, not their content). Auto-maintained.\n\n" + idx
+		"\" — the pages you can open with mem_read (only titles/hooks here, not their content). Auto-maintained.\n\n" + idx
 	return Message{Role: "system", Content: content}, true
 }
 

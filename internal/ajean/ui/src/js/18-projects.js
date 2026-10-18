@@ -283,7 +283,36 @@ async function pickProjFromMenu(slug){
 // en entier) et journal (à parcourir, filtrer, nettoyer). Tout passe par le
 // serveur, qui détient la clé : marche aussi avec la mémoire chiffrée.
 let JM_OFF=0, JM_T=null;
-function openJeanMem(){ showModal('jean-mem-modal'); const s=document.getElementById('jm-search'); if(s) s.value=''; jmLoad(false); jmLoadSleep(); }
+function openJeanMem(){ showModal('jean-mem-modal'); const s=document.getElementById('jm-search'); if(s) s.value=''; jmLoad(false); jmLoadSleep(); jmLoadEmbed(); }
+// Recherche par le sens dans le journal (jean_embed.go) : état, avancement de
+// l'indexation, rafraîchi tant que la fenêtre est ouverte et que ça avance.
+async function jmLoadEmbed(){
+  const cb=document.getElementById('jm-embed'), st=document.getElementById('jm-embed-st'); if(!cb||!st) return;
+  let r; try{ r=await jget('/api/jean/embed'); }catch(_){ return; }
+  if(!r || !r.ok) return;
+  jmRenderEmbed(r.status);
+}
+function jmRenderEmbed(s){
+  const cb=document.getElementById('jm-embed'), st=document.getElementById('jm-embed-st'); if(!cb||!st||!s) return;
+  cb.checked=!!s.enabled;
+  let txt='';
+  if(s.enabled){
+    if(s.loading) txt=t('jean.embed_downloading');
+    else if(!s.model) txt=s.error||t('jean.embed_no_model');
+    else if(s.indexed<s.total) txt=t('jean.embed_indexing').replace('{n}',s.indexed).replace('{t}',s.total);
+    else txt=t('jean.embed_ready').replace('{t}',s.total);
+    if(s.error && !s.loading && s.model && s.indexed<s.total) txt+=' · '+s.error;
+  }
+  st.textContent=txt;
+  clearTimeout(jmRenderEmbed.t);
+  const modal=document.getElementById('jean-mem-modal');
+  if(s.enabled && (s.loading || s.indexed<s.total) && modal && modal.style.display!=='none') jmRenderEmbed.t=setTimeout(jmLoadEmbed, 3000);
+}
+async function jmToggleEmbed(){
+  const on=document.getElementById('jm-embed').checked;
+  const r=await jpost('/api/jean/embed',{on});
+  if(r && r.ok) jmRenderEmbed(r.status); else if(r && r.error) toast(r.error);
+}
 // Preset du sommeil : la consolidation de nuit bascule dessus, puis revient.
 async function jmLoadSleep(){
   const sel=document.getElementById('jm-sleep'); if(!sel) return;

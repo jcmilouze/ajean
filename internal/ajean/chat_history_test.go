@@ -126,7 +126,7 @@ func TestDeleteNonFavKeepsActive(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	n := deleteNonFavArchives(c.ID)
+	n := deleteNonFavIn(listArchives(), c.ID)
 	if n != 1 {
 		t.Fatalf("attendu 1 suppression, obtenu %d", n)
 	}

@@ -1,21 +1,18 @@
 package ajean
 
-// tools_grouped.go — UN outil par domaine pour le modèle :
-// memory, task, recall, web, browser, see, jean, file. Chacun prend un paramètre
-// `action` qui choisit l'opération.
+// tools_grouped.go — appels d'outils REGROUPÉS par domaine (memory, task,
+// recall, web, browser, see, jean, file, avec un paramètre `action`).
 //
-// En interne rien ne change : EnabledTools construit toujours la liste fine
-// (mem_read, web_search, jean_rule…), groupTools la regroupe au moment de
-// l'envoyer au modèle, et expandToolCall retraduit chaque appel reçu vers
-// l'outil interne AVANT tout le reste (libellés, exécution, événements de l'UI,
-// garde-fous du mode Jean). L'historique garde les appels tels que le modèle
-// les a écrits.
+// La 0.18.2 envoyait au modèle un outil par domaine ; c'est abandonné (le modèle
+// appelait nettement plus souvent de travers) et il revoit les outils séparés.
+// Restent les conversations de cette période, et un modèle qui imiterait leurs
+// appels : expandToolCall retraduit un appel regroupé vers l'outil interne AVANT
+// tout le reste, et toolCallLegacy relit l'historique sous les noms internes.
 
 import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
-	"sort"
 	"strings"
 )
 
@@ -61,72 +58,6 @@ var groupOf = func() map[string][2]string {
 	}
 	return m
 }()
-
-// groupTools remplace les outils internes par leur outil de domaine. Les outils
-// sans groupe (bash, app, tracker, MCP…) restent tels quels, à leur place.
-func groupTools(tools []Tool) []Tool {
-	byName := map[string]Tool{}
-	for _, t := range tools {
-		byName[t.Function.Name] = t
-	}
-	out := make([]Tool, 0, len(tools))
-	done := map[string]bool{}
-	for _, t := range tools {
-		gi, ok := groupOf[t.Function.Name]
-		if !ok {
-			out = append(out, t)
-			continue
-		}
-		if done[gi[0]] {
-			continue
-		}
-		done[gi[0]] = true
-		for _, g := range toolGroups {
-			if g.name == gi[0] {
-				out = append(out, buildGroupTool(g, byName))
-			}
-		}
-	}
-	return out
-}
-
-func buildGroupTool(g toolGroup, byName map[string]Tool) Tool {
-	var desc strings.Builder
-	desc.WriteString(g.intro)
-	actions := []string{}
-	props := map[string]any{}
-	for _, mb := range g.members {
-		t, ok := byName[mb[1]]
-		if !ok {
-			continue
-		}
-		actions = append(actions, mb[0])
-		fmt.Fprintf(&desc, "\n- %s: %s", mb[0], strings.TrimSpace(t.Function.Description))
-		p, _ := t.Function.Parameters.(map[string]any)
-		pp, _ := p["properties"].(map[string]any)
-		keys := make([]string, 0, len(pp))
-		for k := range pp {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		ren := g.rename[mb[1]]
-		for _, k := range keys {
-			name := k
-			if r, ok := ren[k]; ok {
-				name = r
-			}
-			if _, dup := props[name]; !dup {
-				props[name] = pp[k]
-			}
-		}
-	}
-	props["action"] = map[string]any{"type": "string", "enum": actions}
-	return Tool{Type: "function", Function: ToolFunction{
-		Name:        g.name,
-		Description: desc.String(),
-		Parameters:  map[string]any{"type": "object", "properties": props, "required": []string{"action"}},
-	}}
-}
 
 // expandToolCall traduit un appel d'outil de domaine vers l'outil interne et
 // ses arguments. Un outil hors groupe passe tel quel. errMsg non vide : action

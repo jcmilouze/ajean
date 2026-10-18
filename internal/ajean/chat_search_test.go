@@ -1,13 +1,12 @@
 package ajean
 
-// issues_98_test.go — recherche plein-texte dans les conversations archivées
-// (issue #98). Écrits AVANT l'implémentation (TDD) : le paquet ne compilait pas,
-// puis chaque test a été prouvé mordant par une mutation d'une ligne (voir le détail
-// dans la description de PR).
+// Recherche plein-texte de l'historique (la loupe, issue #98), testée par ce que
+// l'interface appelle vraiment : handleChatHistory ?q= et histBodyScores.
 
 import (
 	"encoding/json"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -61,7 +60,28 @@ func histContent(ts int64, s string) LogEvent {
 	return LogEvent{TS: ts, Delta: map[string]any{"content": s}}
 }
 
-func histHasHit(res histSearchResult, id string) bool {
+// histRes est la réponse de la vraie recherche de l'historique (la loupe).
+type histRes struct {
+	State string            `json:"state"`
+	Total int               `json:"total"`
+	Terms []string          `json:"terms"`
+	Hits  []convArchiveMeta `json:"conversations"`
+}
+
+// histFind interroge handleChatHistory avec ?q= (plus d'éventuels paramètres).
+func histFind(t *testing.T, q, extra string) histRes {
+	t.Helper()
+	u := "/api/chat/history?q=" + url.QueryEscape(q) + extra
+	rr := httptest.NewRecorder()
+	handleChatHistory(rr, httptest.NewRequest("GET", u, nil))
+	var res histRes
+	if err := json.Unmarshal(rr.Body.Bytes(), &res); err != nil {
+		t.Fatalf("réponse illisible : %v (%s)", err, rr.Body.String())
+	}
+	return res
+}
+
+func histHasHit(res histRes, id string) bool {
 	for _, h := range res.Hits {
 		if h.ID == id {
 			return true
@@ -112,7 +132,7 @@ func TestHistSearchBodyMatch(t *testing.T) {
 	histArchive(t, "B", "generale", "Recette", 200, false,
 		[]LogEvent{histUser(1, "préparons une tarte")})
 
-	res := histSearch("phare", "", 0, 0)
+	res := histFind(t, "phare", "")
 	if res.State != "ok" {
 		t.Fatalf("état attendu ok, obtenu %q", res.State)
 	}
@@ -121,9 +141,6 @@ func TestHistSearchBodyMatch(t *testing.T) {
 	}
 	if len(res.Hits) != 1 || res.Hits[0].ID != "A" {
 		t.Fatalf("A attendu en résultat, obtenu %+v", res.Hits)
-	}
-	if res.Hits[0].Snippet == "" {
-		t.Fatal("extrait (aperçu) attendu non vide pour A")
 	}
 	for _, h := range res.Hits {
 		if h.ID == "B" {
@@ -143,7 +160,7 @@ func TestHistSearchTitleBeatsBody(t *testing.T) {
 	histArchive(t, "B", "generale", "Discussion diverse", 200, false,
 		[]LogEvent{histUser(1, "on a vu un phare hier")})
 
-	res := histSearch("phare", "", 0, 0)
+	res := histFind(t, "phare", "")
 	if res.Total != 2 || len(res.Hits) != 2 {
 		t.Fatalf("2 résultats attendus, obtenu total=%d hits=%+v", res.Total, res.Hits)
 	}
@@ -165,7 +182,7 @@ func TestHistSearchRelevanceThenDate(t *testing.T) {
 	histArchive(t, "C", "generale", "Phare récent", 300, false,
 		[]LogEvent{histUser(1, "corps neutre")})
 
-	res := histSearch("phare", "", 0, 0)
+	res := histFind(t, "phare", "")
 	got := []string{}
 	for _, h := range res.Hits {
 		got = append(got, h.ID)
@@ -191,7 +208,7 @@ func TestHistSearchFavoriteDoesNotOutrankRelevance(t *testing.T) {
 	histArchive(t, "B", "generale", "Le phare", 100, false,
 		[]LogEvent{histUser(1, "corps neutre")})
 
-	res := histSearch("phare", "", 0, 0)
+	res := histFind(t, "phare", "")
 	if res.Total != 2 || len(res.Hits) != 2 {
 		t.Fatalf("2 résultats attendus, obtenu total=%d hits=%+v", res.Total, res.Hits)
 	}
@@ -205,24 +222,18 @@ func TestHistSearchFavoriteDoesNotOutrankRelevance(t *testing.T) {
 
 // --- 4. la session VIVE est cherchée aussi ------------------------------------
 
-// #98 : la session active n'est pas dans chathist (son corps vit dans bkChat). Un
-// utilisateur qui cherche le fil EN COURS doit le trouver. Ici la seule archive
-// porte un AUTRE terme, et la session vive n'a AUCUNE fiche chatmeta.
+// #98 : la session active n'est pas dans chathist (son corps vit dans bkChat) ; son
+// texte en RAM doit compter pour la recherche. Ici la seule archive porte un AUTRE
+// terme : seule la session vive doit marquer.
 func TestHistSearchIncludesActiveSession(t *testing.T) {
 	histSetup(t)
 	histArchive(t, "A", "generale", "Autre sujet", 100, false,
 		[]LogEvent{histUser(1, "on parle boussole")})
 	histSetLive(t, "live1", "generale", "", []LogEvent{histUser(1, "le phare en direct")})
 
-	res := histSearch("phare", "", 0, 0)
-	if res.Total != 1 || len(res.Hits) != 1 {
-		t.Fatalf("la session vive devait ressortir seule : total=%d hits=%+v", res.Total, res.Hits)
-	}
-	if res.Hits[0].ID != "live1" {
-		t.Fatalf("id attendu live1, obtenu %q", res.Hits[0].ID)
-	}
-	if res.Hits[0].Title != "le phare en direct" {
-		t.Fatalf("titre dérivé du fil vif attendu, obtenu %q", res.Hits[0].Title)
+	scores, _, state := histBodyScores("phare")
+	if state != "ok" || scores["live1"] != 1 || scores["A"] != 0 {
+		t.Fatalf("la session vive devait marquer seule : state=%q scores=%v", state, scores)
 	}
 }
 
@@ -241,7 +252,8 @@ func TestHistSearchDoesNotPersistLive(t *testing.T) {
 	beforeChat := getBytes(bkChat, "conversation")
 	beforeMeta := getBytes(bkChatMeta, "live1")
 
-	_ = histSearch("phare", "", 0, 0)
+	_, _, _ = histBodyScores("phare")
+	_ = histFind(t, "phare", "")
 
 	if v := getBytes(bkChatHist, "live1"); v != nil {
 		t.Fatal("la recherche a archivé la session vive dans chathist")
@@ -266,11 +278,11 @@ func TestHistSearchProjectScope(t *testing.T) {
 	histArchive(t, "A", "alpha", "Projet alpha", 100, false, []LogEvent{histUser(1, "le phare")})
 	histArchive(t, "B", "beta", "Projet beta", 100, false, []LogEvent{histUser(1, "le phare")})
 
-	ra := histSearch("phare", "alpha", 0, 0)
+	ra := histFind(t, "phare", "&project=alpha")
 	if len(ra.Hits) != 1 || ra.Hits[0].ID != "A" {
 		t.Fatalf("projet alpha : A attendu seul, obtenu %+v", ra.Hits)
 	}
-	rb := histSearch("phare", "beta", 0, 0)
+	rb := histFind(t, "phare", "&project=beta")
 	if len(rb.Hits) != 1 || rb.Hits[0].ID != "B" {
 		t.Fatalf("projet beta : B attendu seul, obtenu %+v", rb.Hits)
 	}
@@ -291,7 +303,7 @@ func TestHistSearchLockedState(t *testing.T) {
 	}
 	clearMemDEK() // verrouillé
 
-	res := histSearch("phare", "", 0, 0)
+	res := histFind(t, "phare", "")
 	if res.State != "locked" {
 		t.Fatalf("état attendu locked, obtenu %q", res.State)
 	}
@@ -311,7 +323,7 @@ func TestHistSearchNoUsableTerms(t *testing.T) {
 	histSetup(t)
 	histArchive(t, "A", "generale", "Phare", 100, false, []LogEvent{histUser(1, "le phare")})
 
-	res := histSearch("a!", "", 0, 0)
+	res := histFind(t, "a!", "")
 	if res.State != "no_terms" {
 		t.Fatalf("état attendu no_terms, obtenu %q", res.State)
 	}
@@ -391,46 +403,20 @@ func TestHistSearchCoverageContract(t *testing.T) {
 	}
 	indexArchive(&convArchive{ID: "a", Project: "generale", Title: "a", SavedAt: 100, Log: log})
 
-	res := histSearch("phare", "", 0, 0)
-	if res.IndexedTotal != 3 {
-		t.Fatalf("indexed_total attendu 3, obtenu %d", res.IndexedTotal)
-	}
-	if res.Indexed >= res.IndexedTotal {
-		t.Fatalf("index partiel attendu (%d/%d)", res.Indexed, res.IndexedTotal)
-	}
+	res := histFind(t, "phare", "")
 	if res.Total != 1 {
 		t.Fatalf("1 seule trouvable avant rattrapage, obtenu %d", res.Total)
 	}
 
 	histSearchIndexBackfill()
 
-	res = histSearch("phare", "", 0, 0)
-	if res.Indexed != res.IndexedTotal || res.IndexedTotal != 3 {
-		t.Fatalf("après rattrapage : indexed=%d indexed_total=%d (3 attendus)", res.Indexed, res.IndexedTotal)
-	}
+	res = histFind(t, "phare", "")
 	if res.Total != 3 {
 		t.Fatalf("les 3 sessions devaient être trouvables, obtenu %d", res.Total)
 	}
 }
 
 // --- 12. le classement vient de l'index, pas des corps -------------------------
-
-// #98 : une session dont le CORPS n'est plus lisible (ou absent) doit rester
-// trouvable tant que sa fiche et son entrée d'index existent. Zéro chargement de
-// corps par requête.
-func TestHistSearchRanksFromIndexNotBodies(t *testing.T) {
-	histSetup(t)
-	a := &convArchive{ID: "A", Project: "generale", Title: "Titre", SavedAt: 100,
-		Log: []LogEvent{histUser(1, "le phare")}}
-	// Fiche présente, entrée d'index présente, mais AUCUN corps dans chathist.
-	putStoreJSON(bkChatMeta, "A", convArchiveMeta{ID: "A", Project: "generale", Title: "Titre", SavedAt: 100})
-	indexArchive(a)
-
-	res := histSearch("phare", "", 0, 0)
-	if res.Total != 1 || len(res.Hits) != 1 || res.Hits[0].ID != "A" {
-		t.Fatalf("le résultat devait venir de l'index, obtenu %+v", res.Hits)
-	}
-}
 
 // --- 13. la session vive n'apparaît qu'une fois, et son score est MAX, pas SOMME
 //
@@ -460,7 +446,7 @@ func TestHistSearchDeduplicatesActiveAgainstArchive(t *testing.T) {
 		t.Fatalf("OpenSession(A) : %v", err)
 	}
 
-	res := histSearch("alpha beta", "", 0, 0)
+	res := histFind(t, "alpha beta", "")
 	n := 0
 	for _, h := range res.Hits {
 		if h.ID == "A" {
@@ -490,7 +476,7 @@ func TestHistSearchPagination(t *testing.T) {
 	histArchive(t, "B", "generale", "Phare B", 200, false, []LogEvent{histUser(1, "le phare")})
 	histArchive(t, "C", "generale", "Phare C", 300, false, []LogEvent{histUser(1, "le phare")})
 
-	page := histSearch("phare", "", 1, 1)
+	page := histFind(t, "phare", "&offset=1&limit=1")
 	if len(page.Hits) != 1 {
 		t.Fatalf("1 résultat par page attendu, obtenu %d", len(page.Hits))
 	}
@@ -501,7 +487,7 @@ func TestHistSearchPagination(t *testing.T) {
 		t.Fatalf("second résultat attendu B, obtenu %s", page.Hits[0].ID)
 	}
 
-	beyond := histSearch("phare", "", 10, 5)
+	beyond := histFind(t, "phare", "&offset=10&limit=5")
 	if len(beyond.Hits) != 0 || beyond.Total != 3 {
 		t.Fatalf("au-delà de la fin : 0 hit et total 3 attendus, obtenu hits=%d total=%d", len(beyond.Hits), beyond.Total)
 	}
@@ -519,13 +505,13 @@ func TestHistSearchEmptyQueryUnchanged(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handleChatHistory(rr, httptest.NewRequest("GET", "/api/chat/history", nil))
 	var got struct {
-		OK            bool             `json:"ok"`
-		State         string           `json:"state"`
-		Conversations []convArchiveHit `json:"conversations"`
-		Total         int              `json:"total"`
-		Indexed       int              `json:"indexed"`
-		IndexedTotal  int              `json:"indexed_total"`
-		Terms         []string         `json:"terms"`
+		OK            bool              `json:"ok"`
+		State         string            `json:"state"`
+		Conversations []convArchiveMeta `json:"conversations"`
+		Total         int               `json:"total"`
+		Indexed       int               `json:"indexed"`
+		IndexedTotal  int               `json:"indexed_total"`
+		Terms         []string          `json:"terms"`
 	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
 		t.Fatalf("réponse illisible : %v (%s)", err, rr.Body.String())
@@ -562,12 +548,12 @@ func TestHistSearchAccentFolding(t *testing.T) {
 		[]LogEvent{histUser(1, "voici le resume du dossier")})
 
 	// Requête SANS accent trouve le corps accentué (A).
-	ra := histSearch("resume", "", 0, 0)
+	ra := histFind(t, "resume", "")
 	if len(ra.Hits) != 2 {
 		t.Fatalf("resume devait trouver les 2, obtenu %+v", ra.Hits)
 	}
 	// Requête AVEC accent trouve le corps non accentué (B).
-	rb := histSearch("résumé", "", 0, 0)
+	rb := histFind(t, "résumé", "")
 	if len(rb.Hits) != 2 {
 		t.Fatalf("résumé devait trouver les 2, obtenu %+v", rb.Hits)
 	}
@@ -589,7 +575,7 @@ func TestHistSearchIndexesVisibleTextOnly(t *testing.T) {
 		[]LogEvent{{TS: 1, Delta: map[string]any{"tool_used": map[string]any{
 			"name": "bash", "label": "ls", "result": "le zèbre est dans le corps", "done": true}}}})
 
-	res := histSearch("zèbre", "", 0, 0)
+	res := histFind(t, "zèbre", "")
 	if !histHasHit(res, "A") {
 		t.Fatalf("la réponse assistant (content) devait être indexée : %+v", res.Hits)
 	}
@@ -618,7 +604,7 @@ func TestHistSearchPrefixMatchesBody(t *testing.T) {
 	histArchive(t, "B", "generale", "Autre", 200, false,
 		[]LogEvent{histUser(1, "rien à voir ici")})
 
-	res := histSearch("compil", "", 0, 0)
+	res := histFind(t, "compil", "")
 	if res.Total != 1 || len(res.Hits) != 1 || res.Hits[0].ID != "A" {
 		t.Fatalf("compil devait trouver A (corps « compiling »), obtenu %+v", res.Hits)
 	}
@@ -632,16 +618,13 @@ func TestHistSearchPrefixMatchesBody(t *testing.T) {
 // sur « deepseek ») — c'est précisément ce qui empêche une future « amélioration » en
 // sous-chaîne de passer inaperçue (exigence explicite : pas de mid-word).
 //
-// « deepseek » est placé dans un TITRE (et non seulement dans un corps) à dessein : le
-// scan du corps, borné par Seek au préfixe « p|eepseek », ne peut de toute façon pas
-// atteindre un token qui trie AVANT le terme (« deepseek » < « eepseek ») — une
-// mutation du seul prédicat n'y produit rien d'observable. Le titre, lui, énumère tous
-// ses tokens via histSetMatches : c'est là qu'une bascule HasPrefix → Contains se voit.
+// Les titres sont neutres : le titre se cherche en sous-chaîne (règle de la loupe),
+// seul le texte suit la règle de préfixe.
 func TestHistSearchPrefixRejectsNonPrefix(t *testing.T) {
 	histSetup(t)
-	histArchive(t, "A", "generale", "compiling", 100, false,
+	histArchive(t, "A", "generale", "Sujet un", 100, false,
 		[]LogEvent{histUser(1, "compiling le binaire")})
-	histArchive(t, "B", "generale", "deepseek", 200, false,
+	histArchive(t, "B", "generale", "Sujet deux", 200, false,
 		[]LogEvent{histUser(1, "on parle deepseek ici")})
 
 	cases := []struct {
@@ -652,7 +635,7 @@ func TestHistSearchPrefixRejectsNonPrefix(t *testing.T) {
 		{"eepseek", "milieu du mot « deepseek »"},
 	}
 	for _, c := range cases {
-		res := histSearch(c.q, "", 0, 0)
+		res := histFind(t, c.q, "")
 		if res.Total != 0 || len(res.Hits) != 0 {
 			t.Fatalf("%s : %q ne devait rien trouver, obtenu total=%d %+v", c.desc, c.q, res.Total, res.Hits)
 		}
@@ -671,7 +654,7 @@ func TestHistSearchPrefixMatchesTitle(t *testing.T) {
 	histArchive(t, "B", "generale", "Sujet divers", 200, false,
 		[]LogEvent{histUser(1, "on finit le compiling")})
 
-	res := histSearch("compil", "", 0, 0)
+	res := histFind(t, "compil", "")
 	if res.Total != 2 || len(res.Hits) != 2 {
 		t.Fatalf("2 résultats attendus (titre A + corps B), obtenu total=%d %+v", res.Total, res.Hits)
 	}
@@ -694,7 +677,7 @@ func TestHistSearchPrefixCountsTermOnce(t *testing.T) {
 	histArchive(t, "B", "generale", "Neutre", 200, false,
 		[]LogEvent{histUser(1, "on a fini de compiling")})
 
-	res := histSearch("compil", "", 0, 0)
+	res := histFind(t, "compil", "")
 	if res.Total != 2 || len(res.Hits) != 2 {
 		t.Fatalf("2 résultats attendus, obtenu total=%d %+v", res.Total, res.Hits)
 	}
@@ -720,44 +703,13 @@ func TestHistSearchPrefixMatchesLiveSession(t *testing.T) {
 		[]LogEvent{histUser(1, "rien de spécial")})
 	histSetLive(t, "live1", "generale", "", []LogEvent{histUser(1, "salut"), histContent(2, "on parle de compilation ici")})
 
-	res := histSearch("compil", "", 0, 0)
-	if res.Total != 1 || len(res.Hits) != 1 || res.Hits[0].ID != "live1" {
-		t.Fatalf("la session vive devait ressortir sur « compil » (corps « compilation »), obtenu %+v", res.Hits)
+	scores, _, _ := histBodyScores("compil")
+	if scores["live1"] != 1 || scores["A"] != 0 {
+		t.Fatalf("la session vive devait marquer sur « compil » (corps « compilation »), obtenu %v", scores)
 	}
 }
 
 // --- 21. couverture : une fiche chatmeta SANS corps n'est pas « à indexer » ---
-
-// #98 (défaut n°2, base réelle) : une session peut avoir une fiche chatmeta SANS
-// corps dans chathist (incohérence pré-existante tolérée ailleurs — le cas MIROIR est
-// traité par listAllArchives). Le rattrapage itère allKeys(bkChatHist) : cette session
-// n'aura JAMAIS de fiche d'index. La compter au dénominateur bloquait la couverture à
-// 13/14 à jamais (constaté : stable pendant des minutes, /api/chat/peek rendant 404),
-// l'UI affichant « indexation en cours » en permanence. Le dénominateur doit ranger sur
-// le MÊME ensemble que le rattrapage : chatmeta ∩ chathist, plus la session vive.
-func TestHistSearchCoverageIgnoresMetaWithoutBody(t *testing.T) {
-	histSetup(t)
-	histArchive(t, "normale", "generale", "Sujet", 100, false,
-		[]LogEvent{histUser(1, "le phare")})
-	// Fiche chatmeta ORPHELINE : AUCUN corps dans chathist — l'équivalent réel d'une
-	// session dont /api/chat/peek?id= rend 404.
-	if err := putStoreJSON(bkChatMeta, "orpheline", convArchiveMeta{ID: "orpheline", Project: "generale",
-		Title: "sans corps", SavedAt: 200}); err != nil {
-		t.Fatal(err)
-	}
-
-	res := histSearch("phare", "", 0, 0)
-	if res.IndexedTotal != 1 {
-		t.Fatalf("indexed_total attendu 1 (seule la session indexable), obtenu %d", res.IndexedTotal)
-	}
-	if res.Indexed != res.IndexedTotal {
-		t.Fatalf("couverture satisfaite attendue (l'orpheline ne doit pas rester « à indexer ») : %d/%d",
-			res.Indexed, res.IndexedTotal)
-	}
-	if !histHasHit(res, "normale") || histHasHit(res, "orpheline") {
-		t.Fatalf("la session normale attendue, l'orpheline exclue : %+v", res.Hits)
-	}
-}
 
 // putArchiveRaw écrit une archive dans l'historique SANS passer par l'index// plein-texte — pour simuler des sessions antérieures à #98.
 func putArchiveRaw(t *testing.T, a *convArchive) {

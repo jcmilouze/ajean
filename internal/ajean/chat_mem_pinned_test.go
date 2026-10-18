@@ -24,7 +24,7 @@ func TestReminderRoundTrip(t *testing.T) {
 		t.Fatalf("un rappel aurait dû être construit")
 	}
 	txt, _ := m.Content.(string)
-	if !strings.Contains(txt, "regles-tache.md") || !strings.Contains(txt, "memory(read)") {
+	if !strings.Contains(txt, "regles-tache.md") || !strings.Contains(txt, "mem_read") {
 		t.Fatalf("le rappel ne cite pas la page ou n'invite pas à relire : %q", txt)
 	}
 	// Le rappel doit se relire (noms) pour survivre au compactage suivant.

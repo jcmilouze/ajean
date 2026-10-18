@@ -267,3 +267,22 @@ func TestDisableMemEncryptionSurvitAuxValeursIllisibles(t *testing.T) {
 		t.Fatal("la quarantaine doit contenir la valeur illisible")
 	}
 }
+
+// (outil de test, déplacé du code : seul le test s'en sert)
+// writeMemPlain écrit une page EN CLAIR quel que soit l'état du chiffrement.
+// Réservé au déchiffrement (DisableMemEncryption) : il faut pouvoir poser du
+// clair pendant que le drapeau MEM_ENCRYPTED est encore levé, sinon writeMemFile
+// re-chiffrerait ce qu'on cherche justement à déchiffrer.
+func writeMemPlain(name string, plain []byte) error {
+	p, err := safeMemPath(name)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(memoryDir(), 0o755); err != nil {
+		return err
+	}
+	if old, err := os.ReadFile(p); err == nil {
+		_ = memWriteFileAtomic(p+".bak", old, 0o600)
+	}
+	return memWriteFileVerified(p, plain, 0o600)
+}

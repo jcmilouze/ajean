@@ -145,29 +145,24 @@ func TestAppCreateRendersWithScripts(t *testing.T) {
 	}
 }
 
-// Le modèle voit un outil par domaine ; chaque appel revient à l'outil interne.
-func TestGroupedTools(t *testing.T) {
-	caps := Caps{Agent: true, Internet: true, Mem: MemAlways}
-	legacy := EnabledTools(caps)
-	grouped := groupTools(legacy)
+// Le modèle voit les outils SÉPARÉS ; un appel regroupé (conversation de la
+// période 0.18.2 rejouée) revient quand même à l'outil interne.
+func TestToolsSeparatesEtAppelsRegroupes(t *testing.T) {
 	names := map[string]bool{}
-	for _, tl := range grouped {
+	for _, tl := range EnabledTools(Caps{Agent: true, Internet: true, Mem: MemAlways}) {
 		if names[tl.Function.Name] {
 			t.Fatalf("doublon %s", tl.Function.Name)
 		}
 		names[tl.Function.Name] = true
-		if _, ok := groupOf[tl.Function.Name]; ok && tl.Function.Name != "recall" {
-			t.Fatalf("outil interne %s exposé au modèle", tl.Function.Name)
-		}
 	}
-	for _, want := range []string{"bash", "file", "memory", "task", "web", "app", "tracker"} {
+	for _, want := range []string{"bash", "write", "edit", "mem_read", "task_create", "web_grep", "app", "tracker"} {
 		if !names[want] {
 			t.Fatalf("outil %s absent : %v", want, names)
 		}
 	}
-	lb, _ := json.Marshal(legacy)
-	gb, _ := json.Marshal(grouped)
-	t.Logf("schémas : %d → %d car. (%d → %d outils)", len(lb), len(gb), len(legacy), len(grouped))
+	if names["memory"] || names["web"] || names["file"] {
+		t.Fatalf("outil regroupé exposé au modèle : %v", names)
+	}
 	cases := []struct {
 		name string
 		args map[string]any

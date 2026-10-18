@@ -247,7 +247,7 @@ func jeanMemoryDump() (string, error) {
 	}
 	b.WriteString("\n## LESSONS\n" + numberedLessons(ls) + "\n")
 	if rs := jeanRulesLocked(); len(rs) > 0 {
-		b.WriteString("\n## RULES YOUR HARNESS ENFORCES (jean(rule))\n")
+		b.WriteString("\n## RULES YOUR HARNESS ENFORCES (jean_rule)\n")
 		for _, r := range rs {
 			b.WriteString(r.String() + "\n")
 		}
@@ -266,7 +266,7 @@ func jeanMemoryDump() (string, error) {
 		if total <= jeanConsolidateFullChars {
 			fmt.Fprintf(&b, "\n### fiche %s (when: %s) · changed %s · %s\n%s\n", f.Name, f.When, changed, use, f.Content)
 		} else {
-			fmt.Fprintf(&b, "- %s (when: %s) · changed %s · %s · %d chars, jean(read) to open\n", f.Name, f.When, changed, use, len([]rune(f.Content)))
+			fmt.Fprintf(&b, "- %s (when: %s) · changed %s · %s · %d chars, jean_read to open\n", f.Name, f.When, changed, use, len([]rune(f.Content)))
 		}
 	}
 	// Ce qui existe vraiment dans son espace : une fiche qui cite un script
@@ -324,14 +324,14 @@ func jeanMemoryDump() (string, error) {
 func jeanConsolidatePrompt() string {
 	return `[MEMORY CONSOLIDATION. Silent maintenance while the user is away: nobody reads your answer.]
 Below is your whole long-term memory. Tidy it so that future you finds the right thing at once and is never misled. Work through it:
-1. Duplicates: the same information in two places → keep it only where it belongs (facts about the user → profile; a rule learned from a mistake → lessons; how to do a task → that task's fiche), remove the other copy (jean(forget), or jean(patch) the fiche). Never move a lesson into the profile: lessons are the rules you must never break again (often after a repeated mistake); when a profile line repeats a lesson, remove the profile line.
+1. Duplicates: the same information in two places → keep it only where it belongs (facts about the user → profile; a rule learned from a mistake → lessons; how to do a task → that task's fiche), remove the other copy (jean_forget, or jean_patch the fiche). Never move a lesson into the profile: lessons are the rules you must never break again (often after a repeated mistake); when a profile line repeats a lesson, remove the profile line.
 2. Contradictions between two places of the CURRENT memory: the most recent change wins (see RECENT MEMORY CHANGES). The current memory is the truth: never bring back something that only appears in RECENT MEMORY CHANGES, it was removed or corrected on purpose.
-3. A lesson that only concerns one fiche → jean(lesson) with fiche=<name>, then jean(forget) lecon-N.
-4. Profile lines that are guessed, vague or outdated → fix (jean(remember) same key) or jean(forget).
-5. Fiches: make unclear or patched-up steps clean and precise with jean(patch). Keep every step and pitfall that is still true. When a value changed (a number, a duration, a rate, a path, a method), replace the old value: never leave the new one next to the old, and check that the rest of the line still agrees with it.
-6. Overlapping fiches (same task, or one tool/method replaced by a newer one): the newer fiche is the reference. Merge what is still true into it, then make the older one point to it (jean(patch)) or jean(forget) it if nothing is left. A fiche must never send you to an outdated method.
-7. A fiche section "## Restauré (à réintégrer)" holds lines a past tidy-up lost by mistake: put each back where it belongs in that fiche (jean(patch)), then remove the section.
-8. Dead weight: a fiche not opened for 60+ days and not changed recently, about something that is over or replaced (an old one-off project, an abandoned method) → jean(forget) it: it is archived, not lost (jean(search) still finds it, reading it brings it back). Keep fiches for things that come back from time to time (yearly events, rare but real procedures). Profile lines about things that are over → jean(forget).
+3. A lesson that only concerns one fiche → jean_lesson with fiche=<name>, then jean_forget lecon-N.
+4. Profile lines that are guessed, vague or outdated → fix (jean_remember same key) or jean_forget.
+5. Fiches: make unclear or patched-up steps clean and precise with jean_patch. Keep every step and pitfall that is still true. When a value changed (a number, a duration, a rate, a path, a method), replace the old value: never leave the new one next to the old, and check that the rest of the line still agrees with it.
+6. Overlapping fiches (same task, or one tool/method replaced by a newer one): the newer fiche is the reference. Merge what is still true into it, then make the older one point to it (jean_patch) or jean_forget it if nothing is left. A fiche must never send you to an outdated method.
+7. A fiche section "## Restauré (à réintégrer)" holds lines a past tidy-up lost by mistake: put each back where it belongs in that fiche (jean_patch), then remove the section.
+8. Dead weight: a fiche not opened for 60+ days and not changed recently, about something that is over or replaced (an old one-off project, an abandoned method) → jean_forget it: it is archived, not lost (jean_search still finds it, reading it brings it back). Keep fiches for things that come back from time to time (yearly events, rare but real procedures). Profile lines about things that are over → jean_forget.
 Rules: never invent anything; never delete something true and useful; prefer few precise edits. If everything is already clean, change nothing.
 When done, reply with one short line saying what you changed (or just OK).`
 }

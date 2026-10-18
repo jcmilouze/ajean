@@ -1,6 +1,7 @@
 package ajean
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,7 +16,7 @@ func TestFileWriteVerbatim(t *testing.T) {
 	path := filepath.Join(dir, "sub", "kpi.py")
 	content := "import sqlite3\nq = \"SELECT * FROM t WHERE n = 'a'\"\nprint(q)\n"
 
-	res := fileWrite(path, content)
+	res := fileWriteIn(context.Background(), path, content)
 	if !strings.HasPrefix(res, "[ok]") {
 		t.Fatalf("write a échoué: %s", res)
 	}
@@ -30,10 +31,10 @@ func TestFileWriteVerbatim(t *testing.T) {
 
 func TestFileWriteOverwrites(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "a.txt")
-	if res := fileWrite(path, "ancien"); !strings.HasPrefix(res, "[ok]") {
+	if res := fileWriteIn(context.Background(), path, "ancien"); !strings.HasPrefix(res, "[ok]") {
 		t.Fatalf("premier write: %s", res)
 	}
-	res := fileWrite(path, "nouveau")
+	res := fileWriteIn(context.Background(), path, "nouveau")
 	if !strings.Contains(res, "réécrit") {
 		t.Fatalf("attendu « réécrit », obtenu: %s", res)
 	}
@@ -44,7 +45,7 @@ func TestFileWriteOverwrites(t *testing.T) {
 }
 
 func TestFileWriteRejectsEmptyPath(t *testing.T) {
-	if res := fileWrite("  ", "x"); !strings.HasPrefix(res, "[erreur]") {
+	if res := fileWriteIn(context.Background(), "  ", "x"); !strings.HasPrefix(res, "[erreur]") {
 		t.Fatalf("attendu une erreur, obtenu: %s", res)
 	}
 }

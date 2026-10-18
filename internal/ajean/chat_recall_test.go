@@ -255,3 +255,15 @@ func TestCompactArchivesWhenSummaryFails(t *testing.T) {
 		t.Fatalf("attendu 1 bloc archivé, reçu %d", len(hits))
 	}
 }
+
+// (outil de test, déplacé du code : seul le test s'en sert)
+// archiveRecallBlock enregistre un bloc et renvoie son id ("r<seq>").
+func archiveRecallBlock(label, role, content string) (string, error) {
+	entries, err := archiveRecallBlocks([]recallArchiveInput{{
+		Label: label, Role: role, Content: content,
+	}})
+	if err != nil {
+		return "", err
+	}
+	return entries[0].id, nil
+}

@@ -67,7 +67,8 @@ func TestLecturesSurBaseVide(t *testing.T) {
 	if agentEnabled() || internetEnabled() {
 		t.Error("interrupteurs actifs sur une base neuve")
 	}
-	if readAPIKey() != "" || readWebKey() != "" || readLinkToken() != "" {
+	wk, _ := webKeyHashErr()
+	if readAPIKey() != "" || wk != "" || readLinkToken() != "" {
 		t.Error("clés non vides sur une base neuve")
 	}
 }

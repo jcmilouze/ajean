@@ -139,11 +139,9 @@ func renameArchive(id, title string) error {
 	return saveArchive(a)
 }
 
-// deleteNonFavArchives supprime toutes les sessions SAUF les favoris ET la
-// session active `activeID`. Renvoie le nombre supprimé.
-func deleteNonFavArchives(activeID string) int { return deleteNonFavIn(listArchives(), activeID) }
-
-// deleteNonFavIn : idem sur une liste donnée (celle que l'historique affiche).
+// deleteNonFavIn supprime les sessions de la liste donnée (celle que l'historique
+// affiche) SAUF les favoris ET la session active `activeID`. Renvoie le nombre
+// supprimé.
 func deleteNonFavIn(list []convArchiveMeta, activeID string) int {
 	n := 0
 	for _, m := range list {

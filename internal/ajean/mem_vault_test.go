@@ -61,25 +61,13 @@ func TestVaultRecovery(t *testing.T) {
 	}
 	v.addSecretWrap(dek, wrapRecovery, "récupération", normalizeRecovery(rec))
 
-	// On détruit l'accès mot de passe.
-	if _, err := v.removeWrap(wrapPassword, ""); err != nil {
-		t.Fatal(err)
-	}
+	// La clé de récupération seule rouvre la mémoire (mot de passe perdu).
 	got, kind, err := v.unlockWith(normalizeRecovery(rec))
 	if err != nil {
 		t.Fatalf("récupération: %v", err)
 	}
 	if kind != wrapRecovery || !bytes.Equal(got, dek) {
 		t.Fatal("la clé de récupération n'a pas rouvert la mémoire")
-	}
-}
-
-func TestVaultRefusesLastWrapRemoval(t *testing.T) {
-	testHome(t)
-	v, dek, _ := newVault()
-	v.addSecretWrap(dek, wrapPassword, "principal", "x")
-	if _, err := v.removeWrap(wrapPassword, ""); err == nil {
-		t.Fatal("retirer le dernier wrap aurait dû être refusé")
 	}
 }
 
@@ -135,8 +123,7 @@ func TestMemDEKState(t *testing.T) {
 }
 
 // Zéro-connaissance : le secret détenu par le SERVEUR (clé de pilotage web_key)
-// ne doit PAS pouvoir ouvrir le coffre, et stripServerOpenableWraps retire tout
-// wrap qui le permettrait.
+// ne doit PAS pouvoir ouvrir le coffre.
 func TestServerCannotOpenVault(t *testing.T) {
 	testHome(t)
 	putStr(bkState, "web_key", "cle-de-pilotage-serveur")
@@ -146,18 +133,7 @@ func TestServerCannotOpenVault(t *testing.T) {
 	if _, _, err := v.unlockWith("cle-de-pilotage-serveur"); err == nil {
 		t.Fatal("la clé serveur n'aurait jamais dû ouvrir le coffre")
 	}
-	// Si un wrap « clé d'accès » (ouvrable par le serveur) traînait, on le retire.
-	v.addSecretWrap(dek, wrapE2ERoot, "clé d'accès", "cle-de-pilotage-serveur")
-	saveVault(v)
-	if got, _, err := v.unlockWith("cle-de-pilotage-serveur"); err != nil || !bytes.Equal(got, dek) {
-		t.Fatal("pré-condition: le wrap clé d'accès devrait ouvrir avant strip")
-	}
-	stripServerOpenableWraps()
-	v2, _ := loadVault()
-	if _, _, err := v2.unlockWith("cle-de-pilotage-serveur"); err == nil {
-		t.Fatal("après strip, la clé serveur ne doit plus ouvrir le coffre")
-	}
-	if _, _, err := v2.unlockWith("mon-mdp-client"); err != nil {
+	if _, _, err := v.unlockWith("mon-mdp-client"); err != nil {
 		t.Fatal("le mot de passe client doit toujours ouvrir")
 	}
 }

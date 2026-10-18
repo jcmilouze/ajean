@@ -121,7 +121,7 @@ func buildReminderMessage(names []string) (Message, bool) {
 	if len(names) > memReminderMaxNames {
 		names = names[len(names)-memReminderMaxNames:] // les plus récentes
 	}
-	content := fmt.Sprintf("%s Memory pages you read earlier: %s\nTheir full content is no longer inline after context compaction — if any of them is relevant to what you're doing, memory(read) it again so you have all the rules and info you need before answering.",
+	content := fmt.Sprintf("%s Memory pages you read earlier: %s\nTheir full content is no longer inline after context compaction — if any of them is relevant to what you're doing, mem_read it again so you have all the rules and info you need before answering.",
 		memReminderPrefix, strings.Join(names, ", "))
 	return Message{Role: "system", Content: content}, true
 }

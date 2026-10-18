@@ -127,7 +127,7 @@ func JeanSave(name, when, content string) (string, error) {
 	// puis youtube-alice-views). Jean complète l'existante à la place.
 	if !jeanFicheExists(name) {
 		if f, dup := jeanSimilarFiche(name, when); dup {
-			return "", fmt.Errorf("une fiche couvre déjà ça : « %s » (when: %s). Ne crée pas de doublon : complète-la (jean(read) puis jean(patch), ou jean(save) sous le nom « %s »)", f.Name, f.When, f.Name)
+			return "", fmt.Errorf("une fiche couvre déjà ça : « %s » (when: %s). Ne crée pas de doublon : complète-la (jean_read puis jean_patch, ou jean_save sous le nom « %s »)", f.Name, f.When, f.Name)
 		}
 	}
 	jeanMu.Lock()

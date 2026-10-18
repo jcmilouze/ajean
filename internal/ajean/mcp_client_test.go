@@ -94,3 +94,18 @@ func TestMCPEndToEnd(t *testing.T) {
 		t.Fatalf("echo n'a pas renvoyé le message ; got: %q", out)
 	}
 }
+
+// (outil de test, déplacé du code : seul le test s'en sert)
+// mcpCloseAll ferme toutes les sessions (arrêt du service).
+func mcpCloseAll() {
+	mcpMgr.mu.Lock()
+	sessions := mcpMgr.sessions
+	mcpMgr.sessions = map[string]*mcpSession{}
+	mcpMgr.registry = map[string]mcpToolRef{}
+	mcpMgr.mu.Unlock()
+	for _, s := range sessions {
+		if s.sess != nil {
+			_ = s.sess.Close()
+		}
+	}
+}

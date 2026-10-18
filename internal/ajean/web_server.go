@@ -105,6 +105,8 @@ func newWebMux() *http.ServeMux {
 		LoadConversation()
 		// Sommeil de Jean : reprogrammé après un redémarrage (#154).
 		jeanConsolidateArmAtStart()
+		// Recherche par le sens : rattrape l'indexation du journal (si activée).
+		jeanEmbedKick()
 	})
 	// Pré-chauffe les serveurs MCP en tâche de fond : sinon le handshake (plusieurs
 	// secondes pour un serveur lancé via npx) est payé par le premier message.
@@ -311,6 +313,7 @@ func newWebMux() *http.ServeMux {
 	api("/api/chat/file", handleChatFile)                      // télécharge un fichier produit par l'agent (dossier de travail only)
 	api("/api/chat/stop", handleChatStop)                      // interrompt la génération en cours
 	api("/api/jean/memory", handleJeanMemory)                  // mémoire de Jean : profil, fiches, journal
+	api("/api/jean/embed", handleJeanEmbed)                    // recherche par le sens dans le journal : état, activation
 	api("/api/jean/profile", handleJeanProfile)                // pose / renomme / retire une ligne du profil
 	api("/api/jean/fiche", handleJeanFiche)                    // lit (GET) / enregistre (POST) une fiche
 	api("/api/jean/fiche/delete", handleJeanFicheDelete)       // supprime une fiche

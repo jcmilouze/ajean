@@ -129,17 +129,6 @@ func archiveRecallBlocks(blocks []recallArchiveInput) ([]recallEntry, error) {
 // recallArchive : écriture des archives d'une compaction (remplaçable en test).
 var recallArchive = archiveRecallBlocks
 
-// archiveRecallBlock enregistre un bloc et renvoie son id ("r<seq>").
-func archiveRecallBlock(label, role, content string) (string, error) {
-	entries, err := archiveRecallBlocks([]recallArchiveInput{{
-		Label: label, Role: role, Content: content,
-	}})
-	if err != nil {
-		return "", err
-	}
-	return entries[0].id, nil
-}
-
 // recallGet ramène un bloc par son id. false si l'id est mal formé ou absent.
 func recallGet(id string) (recallBlock, bool) {
 	seq, ok := recallIDToSeq(id)
@@ -264,7 +253,7 @@ func toolRecall(args map[string]any) string {
 	}
 	blk, ok := recallGet(id)
 	if !ok {
-		return fmt.Sprintf("[erreur] bloc %q introuvable — vérifie l'id, ou utilise recall(search) pour le retrouver par mots-clés", id)
+		return fmt.Sprintf("[erreur] bloc %q introuvable — vérifie l'id, ou utilise recall_search pour le retrouver par mots-clés", id)
 	}
 	return fmt.Sprintf("[%s — %s, rappelé verbatim]\n%s", blk.ID, blk.Label, blk.Content)
 }

@@ -24,12 +24,10 @@ import (
 	"strings"
 )
 
-// scriptsPath résout un nom de script fourni par le modèle vers un chemin DANS
-// scriptsDir, en refusant toute évasion hors du dossier (« ../ », chemin absolu).
-// Renvoie une erreur plutôt qu'un chemin hors périmètre.
-func scriptsPath(name string) (string, error) { return scriptsPathIn(scriptsDir(), name) }
-
-// scriptsPathIn : idem dans un dossier de scripts donné (projets ou Jean).
+// scriptsPathIn résout un nom de script fourni par le modèle vers un chemin DANS
+// root (dossier de scripts des projets ou de Jean), en refusant toute évasion hors
+// du dossier (« ../ », chemin absolu). Renvoie une erreur plutôt qu'un chemin hors
+// périmètre.
 func scriptsPathIn(root, name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -63,10 +61,8 @@ func scriptsPathIn(root, name string) (string, error) {
 	return full, nil
 }
 
-// scriptExists valide qu'un nom désigne bien un fichier script existant dans le
+// scriptExistsIn valide qu'un nom désigne bien un fichier script existant dans le
 // dossier (sans lire son contenu). Utilisé pour valider une tâche « script seul ».
-func scriptExists(name string) error { return scriptExistsIn(scriptsDir(), name) }
-
 func scriptExistsIn(root, name string) error {
 	full, err := scriptsPathIn(root, name)
 	if err != nil {

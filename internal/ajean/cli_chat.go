@@ -41,9 +41,9 @@ func terminalSystemPrompt(caps Caps) string {
 	b.WriteString("You are Jean, the assistant of AJEAN, " + where + ".")
 	if caps.Agent {
 		cwd := agentWorkspace()
-		b.WriteString(fmt.Sprintf("\n\nWorking directory: %s (%s/%s). The shell is %s: use its syntax. Relative paths in bash and file resolve in the working directory.\n",
+		b.WriteString(fmt.Sprintf("\n\nWorking directory: %s (%s/%s). The shell is %s: use its syntax. Relative paths in bash, write and edit resolve in the working directory.\n",
 			cwd, runtime.GOOS, runtime.GOARCH, shellName()))
-		b.WriteString("Use bash to look around and run things, file(write) to create a file, file(edit) for a precise change (read the file first). Act instead of guessing: call the tool, then answer. Never end your turn after only thinking.\n")
+		b.WriteString("Use bash to look around and run things, write to create a file, edit for a precise change (read the file first). Act instead of guessing: call the tool, then answer. Never end your turn after only thinking.\n")
 	} else {
 		b.WriteString("\n\n")
 	}
@@ -282,7 +282,7 @@ func (s *chatSession) banner() {
 	}
 	tools := "désactivés"
 	if s.tools {
-		tools = "bash, file"
+		tools = "bash, write, edit"
 	}
 	// Chemin trop long : on garde la fin, la partie parlante.
 	if w := termWidth() - 10; visibleWidth(cwd) > w && w > 10 {
@@ -494,7 +494,7 @@ var chatCommands = []chatCommand{
 	{"/copy", "", "copie la dernière réponse dans le presse-papiers"},
 	{"/save", "[fichier]", "enregistre la conversation en Markdown"},
 	{"/system", "[texte]", "affiche ou change le prompt système"},
-	{"/tools", "[on|off]", "active ou coupe les outils (bash, file)"},
+	{"/tools", "[on|off]", "active ou coupe les outils (bash, write, edit)"},
 	{"/think", "", "affiche ou masque le raisonnement du modèle"},
 	{"/model", "[n°]", "liste les presets ou bascule sur l'un d'eux"},
 	{"/quit", "", "quitte (ou Ctrl-D)"},

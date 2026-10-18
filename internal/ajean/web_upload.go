@@ -254,9 +254,9 @@ func visionMediaNote(files []attachInfo) string {
 	if len(files) == 0 {
 		return ""
 	}
-	head := "Média joint à ce message, que tu vois directement ci-dessous : ne le rouvre PAS avec see(image) ou see(video), tu l'as déjà sous les yeux. Son chemin ne sert que si tu dois le manipuler comme fichier :"
+	head := "Média joint à ce message, que tu vois directement ci-dessous : ne le rouvre PAS avec see_image ou see_video, tu l'as déjà sous les yeux. Son chemin ne sert que si tu dois le manipuler comme fichier :"
 	if len(files) > 1 {
-		head = "Médias joints à ce message, que tu vois directement ci-dessous : ne les rouvre PAS avec see(image) ou see(video), tu les as déjà sous les yeux. Leur chemin ne sert que si tu dois les manipuler comme fichiers :"
+		head = "Médias joints à ce message, que tu vois directement ci-dessous : ne les rouvre PAS avec see_image ou see_video, tu les as déjà sous les yeux. Leur chemin ne sert que si tu dois les manipuler comme fichiers :"
 	}
 	var lines []string
 	for _, f := range files {

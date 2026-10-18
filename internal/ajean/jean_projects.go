@@ -100,7 +100,7 @@ func jeanResolveProject(q string) (Project, bool) {
 func jeanProjectMem(project, page string) string {
 	p, ok := jeanResolveProject(project)
 	if !ok || p.Slug == jeanDirName {
-		return "[erreur] projet introuvable : " + project + " (voir jean(projects))"
+		return "[erreur] projet introuvable : " + project + " (voir jean_projects)"
 	}
 	root := projectMemoryDir(p.Slug)
 	if page == "" {

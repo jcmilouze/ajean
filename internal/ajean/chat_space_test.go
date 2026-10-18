@@ -90,7 +90,7 @@ func TestJeanHorsHistorique(t *testing.T) {
 			t.Fatal("Jean listé dans l'historique")
 		}
 	}
-	deleteNonFavArchives("")
+	deleteNonFavIn(listArchives(), "")
 	if _, ok := loadArchive(jeanConvID); !ok {
 		t.Fatal("« tout supprimer » a effacé la conversation de Jean")
 	}

@@ -99,7 +99,7 @@ func jeanReadOpt(name string, silent bool) (string, error) {
 		if len(names) == 0 {
 			return "", fmt.Errorf("fiche « %s » introuvable : aucune fiche enregistrée", name)
 		}
-		return "", fmt.Errorf("fiche « %s » introuvable (jean(search) peut la retrouver sous un autre nom). Fiches : %s", name, strings.Join(names, ", "))
+		return "", fmt.Errorf("fiche « %s » introuvable (jean_search peut la retrouver sous un autre nom). Fiches : %s", name, strings.Join(names, ", "))
 	}
 	if !silent {
 		jeanNoteFicheUse(name)
@@ -177,12 +177,12 @@ func jeanFicheIndex() string {
 		return jeanFicheScore(fs[i], u[fs[i].Name]) > jeanFicheScore(fs[j], u[fs[j].Name])
 	})
 	var b strings.Builder
-	b.WriteString("\nYour fiches (procedures, how-tos, guides): when one matches the request, jean(read) it FIRST and follow it.\n")
+	b.WriteString("\nYour fiches (procedures, how-tos, guides): when one matches the request, jean_read it FIRST and follow it.\n")
 	used := 0
 	for i, f := range fs {
 		line := "- " + f.Name + ": " + f.When + "\n"
 		if used+len(line) > jeanFicheIndexBudget || i >= jeanFicheIndexLimit {
-			fmt.Fprintf(&b, "(+%d less used fiches not listed: jean(search) finds them)\n", len(fs)-i)
+			fmt.Fprintf(&b, "(+%d less used fiches not listed: jean_search finds them)\n", len(fs)-i)
 			break
 		}
 		b.WriteString(line)
@@ -208,12 +208,12 @@ func jeanFicheHits(terms []string) []string {
 	}
 	for _, f := range jeanFiches(true) {
 		if match(f) {
-			out = append(out, "- [fiche] "+f.Name+": "+f.When+" (jean(read) to open)")
+			out = append(out, "- [fiche] "+f.Name+": "+f.When+" (jean_read to open)")
 		}
 	}
 	for _, f := range jeanArchivedFiches() {
 		if match(f) {
-			out = append(out, "- [fiche archivée] "+f.Name+": "+f.When+" (jean(read) brings it back)")
+			out = append(out, "- [fiche archivée] "+f.Name+": "+f.When+" (jean_read brings it back)")
 		}
 	}
 	return out

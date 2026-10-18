@@ -670,7 +670,7 @@ func repeatedCallResult(prev string, repeats int) string {
 		return "[déjà fait] Cet appel exact a déjà été exécuté " + strconv.Itoa(repeats) +
 			" fois dans ce tour ; son résultat est plus haut dans la conversation. " +
 			"Ne le redemande plus : réponds avec ce que tu as, ou change d'approche " +
-			"(autre URL, autres arguments, web(grep) pour cibler)."
+			"(autre URL, autres arguments, web_grep pour cibler)."
 	}
 	return "[déjà fait] Appel identique déjà exécuté dans ce tour — non rejoué. " +
 		"Voici à nouveau son résultat ; ne le redemande pas une troisième fois.\n\n" + prev
@@ -971,7 +971,11 @@ func runChat(ctx context.Context, messages []Message, temperature float64, caps 
 	}
 	notifyUserPrompt(ctx, messages, caps, cb)
 	var extra []Message
-	tools := groupTools(withRecallTools(EnabledTools(caps), messages))
+	// Outils SÉPARÉS : regroupés par domaine (0.18.2, tools_grouped.go), le modèle
+	// se trompait nettement plus souvent de paramètre ou d'action (~6 % d'appels
+	// mal formés contre ~0,2 %, mesuré sur 750 conversations). groupTools reste
+	// disponible mais n'est plus branché.
+	tools := withRecallTools(EnabledTools(caps), messages)
 	// Destination des complétions : llama-server local, ou une API OpenAI-compatible
 	// externe si le preset actif en est un (voir backend_external.go). Résolu une
 	// fois par tour ; une bascule de preset en plein tour est rare et se rejoue au
@@ -1945,7 +1949,7 @@ func runChat(ctx context.Context, messages []Message, temperature float64, caps 
 				}
 				if changed {
 					messages = c
-					tools = groupTools(withRecallTools(EnabledTools(caps), messages))
+					tools = withRecallTools(EnabledTools(caps), messages)
 					// La nouvelle base contient déjà tout ce tour : on la publie et on
 					// repart d'un `extra` vide, sinon l'appelant la ré-empilerait avec
 					// les messages du tour et dupliquerait tout.
@@ -1974,7 +1978,7 @@ func runChat(ctx context.Context, messages []Message, temperature float64, caps 
 				// l'UI de l'effacer avant de relancer, pour ne pas afficher deux
 				// blocs de réflexion successifs.
 				cb(StreamEvent{DropReasoning: true})
-				nudge := "You reasoned but did not call a tool or answer. Act NOW: call the appropriate tool directly (e.g. memory(search)/memory(read)/bash), or give your final answer if you already have the info. Don't explain, act."
+				nudge := "You reasoned but did not call a tool or answer. Act NOW: call the appropriate tool directly (e.g. mem_search/mem_read/bash), or give your final answer if you already have the info. Don't explain, act."
 				if nudgeCount > 1 {
 					// Le premier nudge n'a pas suffi : le modèle re-décrit le même plan
 					// sans l'exécuter. Second nudge plus impératif, on lui interdit

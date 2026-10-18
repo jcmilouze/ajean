@@ -200,7 +200,7 @@ func jeanCheckPitfall(name, text string) string {
 	defer jeanPitfallConfirmMu.Unlock()
 	if b != "" && !jeanPitfallConfirm[key] {
 		jeanPitfallConfirm[key] = true
-		return fmt.Sprintf("[refusé] ce piège semble concerner la fiche « %s » plutôt que « %s ». Rappelle jean(lesson) avec fiche=%s ; si « %s » est vraiment la bonne, refais le même appel.", b, name, b, name)
+		return fmt.Sprintf("[refusé] ce piège semble concerner la fiche « %s » plutôt que « %s ». Rappelle jean_lesson avec fiche=%s ; si « %s » est vraiment la bonne, refais le même appel.", b, name, b, name)
 	}
 	return ""
 }

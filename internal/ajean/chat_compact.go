@@ -138,10 +138,10 @@ func compactSummaryBudget() int {
 // Ce marqueur ne rend pas l'image rappelable (recall reste du texte pur), mais
 // il rend sa PERTE visible : le résumeur peut la mentionner dans sa prose, et
 // le modèle sait qu'il doit rappeler see_image plutôt que de deviner.
-const imageLostMarker = " [image — not kept past this point in the conversation once summarized; call see(image) on the same file again if you still need to see it]"
+const imageLostMarker = " [image — not kept past this point in the conversation once summarized; call see_image on the same file again if you still need to see it]"
 
 // videoLostMarker : équivalent pour une partie `input_video` (voir imageLostMarker).
-const videoLostMarker = " [video — not kept past this point in the conversation once summarized; call see(video) on the same file again if you still need to see it]"
+const videoLostMarker = " [video — not kept past this point in the conversation once summarized; call see_video on the same file again if you still need to see it]"
 
 // msgText extrait le texte d'un message (Content est `any`, en pratique string
 // ou nil quand l'assistant n'a que des tool_calls). Un message multimodal
@@ -617,7 +617,7 @@ func compactSummaryUserMsg(summary string, index []recallEntry) string {
 	var b strings.Builder
 	b.WriteString(compactSummaryPrefix)
 	if len(index) > 0 {
-		b.WriteString(" The earlier turns of this conversation were summarized to save context, but nothing is lost: any block referenced below (or in the summary) as recall:rN can be brought back verbatim with the recall(id) tool, and recall(search, \"keywords\") finds older archived blocks not listed here. Here is the summary:\n\n")
+		b.WriteString(" The earlier turns of this conversation were summarized to save context, but nothing is lost: any block referenced below (or in the summary) as recall:rN can be brought back verbatim with the recall(id) tool, and recall_search(\"keywords\") finds older archived blocks not listed here. Here is the summary:\n\n")
 	} else {
 		b.WriteString(" The earlier turns of this conversation were summarized to save context. Here is the summary:\n\n")
 	}

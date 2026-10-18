@@ -238,4 +238,4 @@ var videoCapCache sync.Map // "binaire\x00mtime" -> bool
 
 // videoFallbackNote : consigne quand le moteur ne lit pas la vidéo. Le fichier
 // reste utilisable : quelques images extraites avec ffmpeg, puis see_image.
-const videoFallbackNote = "Le moteur actif ne lit pas la vidéo directement. Pour en voir le contenu, extrais quelques images avec ffmpeg (par exemple `ffmpeg -i <vidéo> -vf fps=1 frame_%03d.jpg`) puis regarde-les avec see(image).\n"
+const videoFallbackNote = "Le moteur actif ne lit pas la vidéo directement. Pour en voir le contenu, extrais quelques images avec ffmpeg (par exemple `ffmpeg -i <vidéo> -vf fps=1 frame_%03d.jpg`) puis regarde-les avec see_image.\n"

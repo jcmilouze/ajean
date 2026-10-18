@@ -33,7 +33,7 @@ func webSearchTool() Tool {
 // donc que ce que le moteur sait réellement faire, et on annonce la limite du JS
 // dans la description pour que le modèle change de source au lieu d'insister.
 func webOpenTool() Tool {
-	desc := "Fetch a URL and return its metadata and outline, not the content; call this before web(read) or web(grep)."
+	desc := "Fetch a URL and return its metadata and outline, not the content; call this before web_read or web_grep."
 	// La limite JavaScript vit dans la description du paramètre url (pas dans la
 	// phrase de l'outil) : c'est un avertissement de comportement, pas un exemple,
 	// et il évite que le modèle réessaie en boucle une page rendue côté client.
@@ -65,11 +65,11 @@ func webOpenTool() Tool {
 func webReadTool() Tool {
 	return Tool{Type: "function", Function: ToolFunction{
 		Name:        "web_read",
-		Description: "Read a range of lines from a URL already opened with web(open).",
+		Description: "Read a range of lines from a URL already opened with web_open.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"url":    map[string]any{"type": "string", "description": "URL opened with web(open)"},
+				"url":    map[string]any{"type": "string", "description": "URL opened with web_open"},
 				"offset": map[string]any{"type": "integer", "description": "Start line (default 1)"},
 				"limit":  map[string]any{"type": "integer", "description": "Default 80, max 500"},
 			},
@@ -81,11 +81,11 @@ func webReadTool() Tool {
 func webGrepTool() Tool {
 	return Tool{Type: "function", Function: ToolFunction{
 		Name:        "web_grep",
-		Description: "Find lines matching a regex in a URL already opened with web(open).",
+		Description: "Find lines matching a regex in a URL already opened with web_open.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"url":         map[string]any{"type": "string", "description": "URL opened with web(open)"},
+				"url":         map[string]any{"type": "string", "description": "URL opened with web_open"},
 				"pattern":     map[string]any{"type": "string", "description": "Regex (case-insensitive)"},
 				"context":     map[string]any{"type": "integer", "description": "Context lines (default 2)"},
 				"max_matches": map[string]any{"type": "integer", "description": "Cap (default 30)"},
@@ -110,7 +110,7 @@ const webMaxOutput = 8000
 func capWebOutput(s string) string {
 	if r := []rune(s); len(r) > webMaxOutput {
 		return string(r[:webMaxOutput]) +
-			"\n…[tronqué : réponse trop longue. Relis par tranches avec web(read, offset, limit) ou cible avec web(grep).]"
+			"\n…[tronqué : réponse trop longue. Relis par tranches avec web_read(offset, limit) ou cible avec web_grep.]"
 	}
 	return s
 }
@@ -170,7 +170,7 @@ func toolWebOpen(args map[string]any) string {
 	for _, l := range entry.lines {
 		chars += len(l)
 	}
-	return fmt.Sprintf("# Ouvert : %s\nTotal : %d lignes, %s (%d caractères)\nEn cache 10 min. Utilise web(read) ou web(grep) pour lire.\n\n## Plan (n° de ligne des titres)\n```\n%s\n```",
+	return fmt.Sprintf("# Ouvert : %s\nTotal : %d lignes, %s (%d caractères)\nEn cache 10 min. Utilise web_read ou web_grep pour lire.\n\n## Plan (n° de ligne des titres)\n```\n%s\n```",
 		entry.url, total, formatBytes(chars), chars, extractOutline(entry.lines))
 }
 
@@ -178,7 +178,7 @@ func toolWebRead(args map[string]any) string {
 	u, _ := args["url"].(string)
 	entry := findCached(u)
 	if entry == nil {
-		return fmt.Sprintf("❌ Page absente du cache. Appelle d'abord web(open, \"%s\").", u)
+		return fmt.Sprintf("❌ Page absente du cache. Appelle d'abord web_open(\"%s\").", u)
 	}
 	total := len(entry.lines)
 	offset := 1
@@ -221,7 +221,7 @@ func toolWebGrep(args map[string]any) string {
 	pattern, _ := args["pattern"].(string)
 	entry := findCached(u)
 	if entry == nil {
-		return fmt.Sprintf("❌ Page absente du cache. Appelle d'abord web(open, \"%s\").", u)
+		return fmt.Sprintf("❌ Page absente du cache. Appelle d'abord web_open(\"%s\").", u)
 	}
 	re, err := regexp.Compile("(?i)" + pattern)
 	if err != nil {
@@ -299,7 +299,7 @@ func cmdInternet(args []string) error {
 		if err := setInternetEnabled(true); err != nil {
 			return err
 		}
-		fmt.Println(green("[ok]") + " accès internet activé — l'IA dispose de web(search)/web(open)/web(read)/web(grep) (si le mode agent est actif)")
+		fmt.Println(green("[ok]") + " accès internet activé — l'IA dispose de web_search/web_open/web_read/web_grep (si le mode agent est actif)")
 	case "off":
 		if err := setInternetEnabled(false); err != nil {
 			return err
@@ -354,7 +354,7 @@ func cmdInternet(args []string) error {
 		fmt.Printf("%s  état: %s\n", cyan("Accès internet"), state)
 		if webEngine() == engineGo {
 			fmt.Printf("  moteur  : %s (aucune installation, pas de rendu JavaScript)\n", bold("intégré"))
-			fmt.Printf("  outils  : web(search), web(open), web(read), web(grep)\n")
+			fmt.Printf("  outils  : web_search, web_open, web_read, web_grep\n")
 			return nil
 		}
 		fmt.Printf("  moteur  : %s\n", bold("crawl4ai"))
@@ -368,7 +368,7 @@ func cmdInternet(args []string) error {
 			reach = green("joignable")
 		}
 		fmt.Printf("  serveur : %s (%s)\n", bold(u), reach)
-		fmt.Printf("  outils  : web(search), web(open), web(read), web(grep)\n")
+		fmt.Printf("  outils  : web_search, web_open, web_read, web_grep\n")
 	default:
 		return fmt.Errorf("usage: ajean internet [on|off|status|engine <go|crawl4ai>|url <url>|key <clé>]")
 	}

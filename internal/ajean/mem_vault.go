@@ -26,7 +26,6 @@ import (
 const (
 	wrapPassword = "password" // mot de passe mémoire choisi par l'utilisateur
 	wrapRecovery = "recovery" // clé de récupération (secours anti-perte)
-	wrapE2ERoot  = "e2e-root" // racine E2E de l'abonné (mot de passe app)
 )
 
 // checkPlain est le témoin scellé par la DEK dans le keyvault : le déballer
@@ -155,25 +154,6 @@ func (v *keyVault) addSecretWrap(dek []byte, kind, label, secret string) error {
 	}
 	v.Wraps = append(v.Wraps, w)
 	return nil
-}
-
-// removeWrap retire les wraps d'un kind (révocation). Renvoie le nombre retiré.
-// Refuse de vider le dernier wrap (sinon la DEK deviendrait irrécupérable).
-func (v *keyVault) removeWrap(kind, label string) (int, error) {
-	kept := v.Wraps[:0:0]
-	removed := 0
-	for _, w := range v.Wraps {
-		if w.Kind == kind && (label == "" || w.Label == label) {
-			removed++
-			continue
-		}
-		kept = append(kept, w)
-	}
-	if removed > 0 && len(kept) == 0 {
-		return 0, errors.New("refus : ce serait le dernier accès à la mémoire")
-	}
-	v.Wraps = kept
-	return removed, nil
 }
 
 // unlockWith tente de reconstituer la DEK à partir d'un secret : essaie chaque
@@ -319,21 +299,6 @@ func loadVault() (*keyVault, error) {
 func vaultExists() bool {
 	v, _ := loadVault()
 	return v != nil
-}
-
-// stripServerOpenableWraps retire du coffre tout wrap ouvrable par un secret que
-// le SERVEUR détient (la clé de pilotage web, jadis ajoutée comme wrap
-// « clé d'accès »). Objectif : le serveur ne doit JAMAIS pouvoir déchiffrer seul.
-// La clé de chiffrement ne vit que côté client (localStorage). Idempotent ;
-// refuse de vider le coffre (removeWrap garde toujours au moins un wrap).
-func stripServerOpenableWraps() {
-	v, _ := loadVault()
-	if v == nil || !v.hasKind(wrapE2ERoot) {
-		return
-	}
-	if n, err := v.removeWrap(wrapE2ERoot, ""); err == nil && n > 0 {
-		_ = saveVault(v)
-	}
 }
 
 // removeVault efface les trois copies du keyvault (après un déchiffrement complet

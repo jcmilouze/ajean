@@ -69,11 +69,9 @@ func workspaceCandidates() []string {
 	return c
 }
 
-// resolveAgentPath résout un chemin fourni par le modèle. Absolu → inchangé ;
-// "~/x" → dans le home de l'utilisateur ; relatif → dans le workspace.
-func resolveAgentPath(p string) string { return resolveSpacePath(context.Background(), p) }
-
-// resolveSpacePath : comme resolveAgentPath, relatif au workspace de l'espace du tour (Jean ou projets).
+// resolveSpacePath résout un chemin fourni par le modèle. Absolu → inchangé ;
+// "~/x" → dans le home de l'utilisateur ; relatif → dans le workspace de
+// l'espace du tour (Jean ou projets).
 func resolveSpacePath(ctx context.Context, p string) string {
 	p = strings.TrimSpace(p)
 	if p == "" {

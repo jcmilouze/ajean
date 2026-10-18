@@ -181,7 +181,7 @@ func TestJeanFiches(t *testing.T) {
 		t.Fatalf("recherche : %s", got)
 	}
 	// Une note trop longue est refusée (plus de troncature silencieuse).
-	if _, err := JeanNote(strings.Repeat("a", jeanNoteMaxChars+1)); err == nil || !strings.Contains(err.Error(), "jean(save)") {
+	if _, err := JeanNote(strings.Repeat("a", jeanNoteMaxChars+1)); err == nil || !strings.Contains(err.Error(), "jean_save") {
 		t.Fatalf("note longue : %v", err)
 	}
 	if _, err := JeanForget("deployer-ajean"); err != nil {

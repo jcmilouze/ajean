@@ -90,20 +90,6 @@ func mcpInvalidate(name string) {
 	}
 }
 
-// mcpCloseAll ferme toutes les sessions (arrêt du service).
-func mcpCloseAll() {
-	mcpMgr.mu.Lock()
-	sessions := mcpMgr.sessions
-	mcpMgr.sessions = map[string]*mcpSession{}
-	mcpMgr.registry = map[string]mcpToolRef{}
-	mcpMgr.mu.Unlock()
-	for _, s := range sessions {
-		if s.sess != nil {
-			_ = s.sess.Close()
-		}
-	}
-}
-
 // headerRoundTripper injecte des en-têtes statiques (auth) sur chaque requête
 // HTTP vers un serveur MCP distant.
 type headerRoundTripper struct {
